@@ -1,0 +1,2371 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador relativista</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Un solo tema oscuro a propósito: el escenario es el espacio.
+     Layout: lienzo grande a la izquierda, panel de mandos a la derecha; en móvil, apilados. */
+  --bg:#06080f;
+  --panel:#0c111c;
+  --line:#1c2436;
+  --ink:#e4e8f1;
+  --muted:#8c95aa;
+  --accent:#f0a35e;   /* ámbar: disco de acreción, corrimiento al rojo */
+  --blue:#7cc4ff;     /* corrimiento al azul */
+  --display:"Newsreader", Georgia, "Times New Roman", serif;
+  --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+header{padding:22px 20px 6px;max-width:1320px;margin:0 auto}
+h1{font-family:var(--display);font-weight:500;font-size:clamp(28px,4.4vw,42px);line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+h1 em{font-style:italic;font-weight:400;color:var(--accent)}
+.sub{color:var(--muted);margin:6px 0 0;max-width:68ch}
+nav{max-width:1320px;margin:0 auto;padding:14px 20px 0;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+nav button{font:500 14px var(--body);color:var(--muted);background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px 10px;cursor:pointer;margin-bottom:-1px}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav button:hover{color:var(--ink)}
+nav button:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+main{max-width:1320px;margin:0 auto;padding:18px 20px 40px}
+.mod{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+.mod[hidden]{display:none}
+.col{display:flex;flex-direction:column;gap:14px;min-width:0}
+.stage{position:relative;background:#000;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:16/10;width:100%}
+.stage canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.stage canvas.lab{position:absolute;inset:0;pointer-events:none;cursor:default}
+.hud{position:absolute;left:10px;top:10px;font:12px/1.45 var(--mono);color:#dfe6f2;background:rgba(6,8,15,.62);padding:6px 9px;border-radius:6px;pointer-events:none;max-width:calc(100% - 20px);font-variant-numeric:tabular-nums}
+.fsbar{position:absolute;right:8px;top:8px;z-index:3;display:flex;gap:6px}
+.fsbar button{display:flex;align-items:center;gap:6px;font:500 12.5px var(--body);color:#e4e8f1;background:rgba(10,14,24,.72);border:1px solid rgba(124,140,170,.35);border-radius:6px;padding:6px 8px;cursor:pointer}
+.fsbar button:hover{background:rgba(26,36,56,.9)}
+.fsbar svg{width:16px;height:16px;display:block}
+.fsbar .panelbtn{display:none}
+.mod.fs{position:fixed;inset:0;z-index:50;display:block;max-width:none;width:100%;height:100%;margin:0;padding:0;background:#000}
+.mod.fs .col{height:100%;gap:0}
+.mod.fs .col > :not(.stage){display:none}
+.mod.fs .stage{aspect-ratio:auto;width:100%;height:100%;border:0;border-radius:0}
+.mod.fs .panel{position:absolute;top:0;right:0;bottom:0;width:min(340px,88vw);overflow:auto;z-index:4;border-radius:0;border-width:0 0 0 1px;background:rgba(12,17,28,.95);transform:translateX(105%);transition:transform .2s ease}
+.mod.fs.panel-open .panel{transform:none}
+.mod.fs .panelbtn{display:flex}
+.mod.fs.panel-open .fsbar{right:calc(min(340px,88vw) + 8px)}
+body.fs-lock{overflow:hidden}
+@media (max-width:700px){
+  .mod.fs .panel{top:auto;left:0;right:0;width:auto;height:52%;border-width:1px 0 0 0;transform:translateY(105%)}
+  .mod.fs.panel-open .panel{transform:none}
+  .mod.fs.panel-open .fsbar{right:8px}
+}
+.hint{position:absolute;right:10px;bottom:8px;font:11px var(--body);color:rgba(220,228,240,.55);pointer-events:none}
+.note{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:min(440px,86%);background:rgba(8,11,19,.9);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:14px;text-align:left}
+.note[hidden]{display:none}
+.note b{color:var(--accent);font-weight:600}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 16px 14px;display:flex;flex-direction:column}
+.group{padding:12px 0;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.group:last-child{border-bottom:0}
+.group[hidden]{display:none}
+.seg[hidden],.ctl[hidden]{display:none}
+.group h3{margin:0;font:600 11px var(--body);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.ctl{display:flex;flex-direction:column;gap:3px}
+.ctl .row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14px}
+.ctl output,.val{font:13px var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+input[type=range]{width:100%;accent-color:var(--accent);margin:2px 0}
+select{width:100%;font:14px var(--body);color:var(--ink);background:#111827;border:1px solid var(--line);border-radius:6px;padding:7px 8px}
+.checks{display:flex;flex-direction:column;gap:6px}
+.checks label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.checks input{accent-color:var(--accent);width:16px;height:16px;margin:0}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.btn{font:500 13px var(--body);color:var(--ink);background:#141c2c;border:1px solid #27324a;border-radius:6px;padding:7px 11px;cursor:pointer}
+.btn:hover{background:#1a2438}
+.btn.primary{background:var(--accent);color:#1b1006;border-color:var(--accent)}
+.btn.primary:hover{background:#f6b57a}
+.seg{display:flex;border:1px solid #27324a;border-radius:6px;overflow:hidden}
+.seg button{flex:1;font:500 13px var(--body);color:var(--muted);background:#111827;border:0;padding:7px 6px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:#223049;color:var(--ink)}
+dl.out{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:0;font-size:13.5px}
+dl.out dt{color:var(--muted)}
+dl.out dd{margin:0;font:13px var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;font:600 11px var(--body);letter-spacing:.04em;padding:2px 8px;border-radius:999px;border:1px solid}
+.chip.ok{color:#9be3b0;border-color:#2e6a43;background:#0f2418}
+.chip.warn{color:#ffd28a;border-color:#7a5a20;background:#2a1f0b}
+.chip.bad{color:#ff9d8f;border-color:#7d2e27;background:#2b0f0d}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h4{margin:0 0 6px;font:600 13px var(--body);color:var(--ink)}
+.chartwrap{position:relative;height:150px}
+.chartwrap canvas{width:100%;height:100%;display:block}
+.bar{height:6px;background:#1a2234;border-radius:3px;overflow:hidden;margin:6px 0 2px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--blue),var(--accent))}
+details.explain{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+details.explain summary{cursor:pointer;font:600 14px var(--body)}
+details.explain p,details.explain li{color:#c9d0de;max-width:72ch;font-size:14.5px}
+details.explain ul{padding-left:18px;margin:8px 0}
+.f{font-family:var(--mono);font-size:13px;color:var(--ink);white-space:nowrap}
+.small{font-size:12.5px;color:var(--muted)}
+footer{max-width:1320px;margin:0 auto;padding:0 20px 30px;color:var(--muted);font-size:13px}
+@media (max-width:960px){.mod{grid-template-columns:1fr}}
+@media (max-width:700px){
+  header{padding:16px 16px 4px} nav{padding:10px 12px 0} main{padding:14px 16px 32px}
+  nav button{padding:8px 8px 10px;font-size:13.5px}
+  .stage{aspect-ratio:1/1}
+  .stage.wide{aspect-ratio:4/3}
+  .hud{font-size:10.5px;padding:4px 7px;left:6px;top:6px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulador <em>relativista</em></h1>
+  <p class="sub">Relatividad especial y general calculadas en el navegador: aberración y Doppler a velocidades extremas, la rotación de Terrell, geodésicas de luz y la caída hacia un agujero negro de Schwarzschild.</p>
+</header>
+<nav role="tablist" aria-label="Módulos">
+  <button role="tab" data-tab="viaje" aria-selected="true">Viaje interestelar</button>
+  <button role="tab" data-tab="objetos" aria-selected="false">Objetos veloces</button>
+  <button role="tab" data-tab="luz" aria-selected="false">Luz y órbitas</button>
+  <button role="tab" data-tab="agujero" aria-selected="false">Agujero negro</button>
+</nav>
+<main>
+
+<!-- ============ VIAJE ============ -->
+<section class="mod" id="mod-viaje">
+  <div class="col">
+    <div class="stage"><canvas id="cv-viaje" aria-label="Vista del cielo desde la nave"></canvas><canvas id="cv-viaje-lab" class="lab" aria-hidden="true"></canvas><div class="hud" id="hud-viaje"></div><div class="hint">Arrastra para mirar alrededor</div></div>
+    <div class="card">
+      <h4 id="trip-title">Plan de viaje</h4>
+      <div class="bar"><i id="trip-bar"></i></div>
+      <div class="chartwrap"><canvas id="trip-chart" aria-label="Tiempo a bordo frente a tiempo en la Tierra"></canvas></div>
+    </div>
+    <details class="explain">
+      <summary>Qué estás viendo</summary>
+      <ul>
+        <li><b>Aberración.</b> Con rapidez η = artanh β, una estrella a ángulo θ de la dirección de vuelo aparece en θ′ con <span class="f">tan(θ′/2) = e<sup>−η</sup> tan(θ/2)</span>. La mitad delantera del cielo se comprime en un cono de semiángulo arccos β.</li>
+        <li><b>Doppler.</b> <span class="f">D = γ(1 + β cos θ)</span>; de frente D = e<sup>η</sup>. Cada estrella se dibuja como un cuerpo negro a temperatura D·T.</li>
+        <li><b>Brillo.</b> El flujo espectral observado es <span class="f">F′<sub>λ</sub> = B<sub>λ</sub>(D·T)·Ω/D²</span>. A velocidades extremas las estrellas delanteras pierden brillo visible (su luz se va al ultravioleta y a los rayos X) y las traseras se apagan en el infrarrojo.</li>
+        <li><b>Fondo de microondas.</b> A 2,7255 K es invisible, pero de frente su temperatura es D·2,7255 K: brilla en el visible a partir de γ ≈ 500. Se dibuja atenuado unas 10⁹ veces respecto a las estrellas; sin atenuar sería cegador.</li>
+        <li><b>Cielo real.</b> 137 096 estrellas: el catálogo de estrellas cercanas de Gaia (EDR3, hasta 100 pc) y Hipparcos (van Leeuwen 2007) para las más lejanas y las demasiado brillantes para Gaia, emparejadas por posición, distancia y magnitud. Se omiten las enanas con M<sub>V</sub> &gt; 12 a más de 10 pc, que solo se verían pasando a menos de ~1 pc. Nombres y constelaciones de Stellarium. En cada fotograma, la tarjeta gráfica calcula desde la posición de la nave la dirección y la distancia de cada estrella, su magnitud aparente <span class="f">m = M<sub>V</sub> + 5 log₁₀(d/10 pc)</span>, la aberración y el Doppler. El color sale de la temperatura, estimada con B−V (Hipparcos) o BP−RP (Gaia). Los destinos fuera del catálogo (centro galáctico, Andrómeda) usan el cielo sintético.</li>
+        <li><b>Nebulosa de Orión.</b> Volumen 3D trazado en la tarjeta gráfica, con centro en θ¹ Ori C a unos 390 pc. La forma sigue los modelos publicados: la luz sale de una capa fina ionizada en la cara de la nube molecular OMC-1 que mira hacia nosotros (Wen y O'Dell 1995), con θ¹ Ori C unos 0,15–0,2 pc por delante de ese frente, una burbuja central vaciada por su viento, la Barra Brillante donde el frente se pone casi de canto, la nube Orión-S al suroeste y un velo neutro delante, con la Bahía Oscura (O'Dell et al. 2009, 2020). Se añaden la nebulosa extendida y M43. Los grumos y filamentos son sintéticos. La nebulosa emite en líneas: Hα y [N II] (rojo), [O III] (verde azulado) y Hβ. Con el Doppler cada línea se desplaza por separado, así que la nebulosa cambia de color y puede desaparecer del visible de forma muy distinta a una estrella. El polvo de la nube oculta y enrojece las estrellas que hay detrás. Las estrellas de Hipparcos a menos de 1,2° con distancias mayores de 250 pc se han llevado a unos 390 pc, y el Trapecio (θ¹ Ori A–D) se ha añadido con una disposición aproximada.</li>
+        <li><b>Nebulosas planetarias.</b> La Hélice (NGC 7293, a ~200 pc) y el Anillo (M57, a ~790 pc), con distancias de Gaia. Son la envoltura que expulsó una estrella como el Sol al final de su vida, ionizada por el núcleo que queda: una enana blanca de 100 000–125 000 K, tan caliente que casi toda su luz sale en el ultravioleta, y por eso en el visible brilla poco (M<sub>V</sub> ≈ 6–7) aunque ilumine toda la nebulosa. El Anillo se modela como un barril alargado con los polos abiertos que vemos casi por el eje (O'Dell et al. 2013), con la ionización en capas: He II en el centro (azul), [O III] dentro (verde) y [N II] en el borde (rojo), más un halo tenue de filamentos. La Hélice tiene un disco grueso interior con un núcleo de [O III], un anillo exterior en otro plano (O'Dell et al. 2004) y unos diez mil nudos cometarios: cabezas de gas molecular y polvo de unas 500 UA con la cara ionizada hacia la estrella y una cola en su sombra. Las orientaciones son aproximadas, y los nudos y filamentos son sintéticos (los nudos, algo agrandados para que el trazado los resuelva). El brillo se calibra con el brillo superficial observado. Con «Explorar» se puede bajar hasta unas 10 UA de la enana blanca.</li>
+        <li><b>Nebulosa del Cangrejo.</b> No es una planetaria, sino el resto de la supernova de 1054, a unos 2 kpc. En el centro está el púlsar, una estrella de neutrones que gira 29,6 veces por segundo; su viento de partículas relativistas llena la nebulosa de electrones que, al girar en el campo magnético, emiten radiación sincrotrón: un continuo en ley de potencias, <span class="f">I<sub>ν</sub> ∝ ν<sup>−α</sup></span>, con α ≈ 0,6 en el centro y ≈ 1 en el borde (los electrones pierden energía al alejarse). Es la luz blanco azulada difusa. Alrededor hay una red de filamentos del material de la estrella, que brillan en líneas: Hα, [N II] y [S II] (rojo), [O III] (verde) y He I 588 (amarillo), con dedos que apuntan hacia dentro, y algo de polvo. Cerca del púlsar se añaden el toro de las «ondulaciones» y un chorro tenue. Forma: elipsoide alargado con el eje mayor hacia el NO-SE, inclinado ~30° (Hester 2008); los filamentos son sintéticos. Con el Doppler, el sincrotrón no cambia de color, solo de brillo (<span class="f">I′<sub>ν</sub> = D<sup>3+α</sup> I<sub>ν</sub></span>), mientras que los filamentos sí cambian de color; el púlsar, también en ley de potencias, varía como <span class="f">D<sup>1+α</sup></span>, y la frecuencia de sus pulsos se multiplica por D. Con «Destellos del púlsar a cámara lenta» su brillo sigue la curva de luz óptica: un pulso principal estrecho y, a 0,4 del periodo, el interpulso, más débil, sobre un fondo casi apagado; en el pico brilla unas 9 veces su media. El ritmo es el que se vería desde la nave (multiplicado por D), ralentizado por el factor elegido. El brillo es el intrínseco, sin la extinción interestelar (~1,6 mag) que lo apaga visto desde la Tierra.</li>
+        <li><b>Pléyades e Híades.</b> Cúmulos abiertos con sus estrellas reales de Gaia DR3: unas 1170 en las Pléyades (a 135,5 pc, unos 100 millones de años) y unas 560 en las Híades (a 47 pc, unos 650 millones de años). Los miembros se eligen por su movimiento común: se ajusta la velocidad 3D del cúmulo y se aceptan las estrellas cuya velocidad tangencial coincide con la esperada en su punto del cielo (dentro de 2–2,5 km/s), lo que tiene en cuenta que, por perspectiva, el movimiento propio cambia de un lado a otro del cúmulo. En las Pléyades, las distancias de las estrellas con paralaje imprecisa se acercan a la del cúmulo, y las más brillantes, saturadas en Gaia, se ponen a la distancia del cúmulo. La nebulosa de las Pléyades no es la nube de la que nacieron, sino una nube de polvo que el cúmulo atraviesa por casualidad: brilla por luz de las estrellas dispersada, no por emisión, y por eso es azul. Se calcula sin ajustes, con dispersión simple de la luz de las ocho estrellas más brillantes (función de fase de Henyey-Greenstein con g = 0,6 y albedo 0,6); la forma de la nube y sus estrías son aproximadas. Con el Doppler, esta luz cambia de color como las estrellas que la iluminan, no como las líneas de emisión.</li>
+        <li><b>Viaje.</b> Con aceleración propia constante a: <span class="f">t = (c/a) sinh(aτ/c)</span>, <span class="f">x = (c²/a)[cosh(aτ/c) − 1]</span>. Las estrellas del fondo se tratan como infinitamente lejanas (sin paralaje); solo el destino cambia de brillo con la distancia.</li>
+      </ul>
+    </details>
+  </div>
+  <aside class="panel" aria-label="Controles del viaje">
+    <div class="group">
+      <h3>Velocidad</h3>
+      <div class="ctl"><div class="row"><label for="v-speed">Rapidez η</label><output id="v-speed-v"></output></div>
+        <input type="range" id="v-speed" min="0" max="1000" step="1" value="316"></div>
+      <dl class="out"><dt>Velocidad</dt><dd id="v-beta"></dd><dt>Factor γ</dt><dd id="v-gamma"></dd></dl>
+      <div class="btns"><button class="btn" data-look="0">Mirar adelante</button><button class="btn" data-look="90">Al lado</button><button class="btn" data-look="180">Atrás</button></div>
+    </div>
+    <div class="group">
+      <h3>Cielo</h3>
+      <div class="seg" id="v-sky"><button data-v="real" aria-pressed="true">Real (Hipparcos + Gaia)</button><button data-v="sint" aria-pressed="false">Sintético</button></div>
+      <div class="checks">
+        <label><input type="checkbox" id="v-cons" checked> Constelaciones (hasta 30 pc del Sol)</label>
+        <label><input type="checkbox" id="v-names" checked> Nombres de estrellas brillantes</label>
+      </div>
+      <p class="small" id="v-sky-note" style="margin:0">Cargando el catálogo…</p>
+    </div>
+    <div class="group" id="v-neb-group" hidden>
+      <h3 id="v-neb-title">Nebulosa de Orión</h3>
+      <div class="seg" id="v-neb-view"><button data-v="foto" aria-pressed="true">Fotografía</button><button data-v="ojo" aria-pressed="false">Ojo humano</button></div>
+      <div class="ctl"><div class="row"><label for="v-neb-gain">Brillo de la nebulosa</label><output id="v-neb-gain-v"></output></div><input type="range" id="v-neb-gain" min="0" max="3" step="0.01" value="1.1"></div>
+      <div class="checks"><label><input type="checkbox" id="v-neb-exp"> Explorar alrededor (nave quieta)</label></div>
+      <div class="ctl"><div class="row"><label for="v-neb-az">Ángulo alrededor</label><output id="v-neb-az-v"></output></div><input type="range" id="v-neb-az" min="-180" max="180" step="1" value="0"></div>
+      <div class="ctl"><div class="row"><label for="v-neb-el">Elevación</label><output id="v-neb-el-v"></output></div><input type="range" id="v-neb-el" min="-80" max="80" step="1" value="0"></div>
+      <div class="ctl"><div class="row"><label for="v-neb-r" id="v-neb-r-l">Distancia a θ¹ Ori C</label><output id="v-neb-r-v"></output></div><input type="range" id="v-neb-r" min="-1.6" max="1" step="0.01" value="0.4"></div>
+      <div id="v-psr-box" hidden>
+        <div class="checks"><label><input type="checkbox" id="v-psr-on"> Destellos del púlsar a cámara lenta</label></div>
+        <div class="ctl"><div class="row"><label for="v-psr-slow">Cámara lenta</label><output id="v-psr-slow-v"></output></div><input type="range" id="v-psr-slow" min="1" max="4" step="0.01" value="1.48"></div>
+      </div>
+      <p class="small" style="margin:0" id="v-neb-note"></p>
+    </div>
+    <div class="group">
+      <h3>Efectos</h3>
+      <div class="checks">
+        <label><input type="checkbox" id="v-aberr" checked> Aberración</label>
+        <label><input type="checkbox" id="v-dopp" checked> Desplazamiento Doppler (color)</label>
+        <label><input type="checkbox" id="v-beam" checked> Intensidad relativista</label>
+        <label><input type="checkbox" id="v-cmb" checked> Fondo cósmico de microondas</label>
+        <label><input type="checkbox" id="v-kcol"> Exagerar el color (falso color: matiz según D³ y más saturado)</label>
+      </div>
+    </div>
+    <div class="group">
+      <h3>Cámara</h3>
+      <div class="ctl"><div class="row"><label for="v-exp">Exposición</label><output id="v-exp-v"></output></div><input type="range" id="v-exp" min="-1" max="3" step="0.01" value="0.9"></div>
+      <div class="ctl"><div class="row"><label for="v-fov">Campo de visión</label><output id="v-fov-v"></output></div><input type="range" id="v-fov" min="-2" max="2.176" step="0.001" value="1.903"></div>
+    </div>
+    <div class="group">
+      <h3>Viaje con aceleración constante</h3>
+      <div class="ctl"><label for="t-dest">Destino</label><select id="t-dest">
+        <option value="0">Alfa Centauri · 4,37 años luz</option>
+        <option value="1">Sirio · 8,6 años luz</option>
+        <option value="2" selected>Vega · 25 años luz</option>
+        <option value="3">Híades · ~150 años luz</option>
+        <option value="4">Pléyades · ~440 años luz</option>
+        <option value="5">Betelgeuse · 548 años luz</option>
+        <option value="6">Nebulosa de la Hélice (NGC 7293) · ~655 años luz</option>
+        <option value="7">Nebulosa de Orión (M42) · ~1270 años luz</option>
+        <option value="8">Nebulosa del Anillo (M57) · ~2580 años luz</option>
+        <option value="9">Nebulosa del Cangrejo (M1) · ~6500 años luz</option>
+        <option value="10">Centro galáctico · 26 700 años luz</option>
+        <option value="11">Galaxia de Andrómeda · 2,54 millones de años luz</option>
+      </select></div>
+      <div class="ctl"><label for="t-acc">Aceleración propia</label><select id="t-acc">
+        <option value="0.1">0,1 g</option><option value="0.5">0,5 g</option><option value="1" selected>1 g</option><option value="2">2 g</option><option value="10">10 g</option>
+      </select></div>
+      <div class="ctl"><label for="t-mode">Perfil</label><select id="t-mode">
+        <option value="brake" selected>Acelerar la mitad y frenar la otra</option>
+        <option value="flyby">Acelerar todo el trayecto (sin frenar)</option>
+      </select></div>
+      <div class="ctl" id="t-arr-box"><div class="row"><label for="t-arr">Llegada: distancia al destino</label><output id="t-arr-v"></output></div><input type="range" id="t-arr" min="-4.3" max="1.3" step="0.01" value="-3.7"></div>
+      <div class="btns"><button class="btn primary" id="t-go">Iniciar viaje</button><button class="btn" id="t-reset">Reiniciar</button></div>
+      <dl class="out" id="t-out"></dl>
+    </div>
+  </aside>
+</section>
+
+<!-- ============ OBJETOS ============ -->
+<section class="mod" id="mod-objetos" hidden>
+  <div class="col">
+    <div class="stage"><canvas id="cv-obj" aria-label="Objeto pasando a velocidad relativista"></canvas><div class="hud" id="hud-obj"></div></div>
+    <details class="explain">
+      <summary>Qué estás viendo</summary>
+      <ul>
+        <li><b>Lo que se mide</b> (línea discontinua azul): posiciones simultáneas en tu sistema de referencia. El objeto está contraído a L/γ en la dirección del movimiento.</li>
+        <li><b>Lo que ve una cámara</b> (relleno): la luz de cada punto tarda distinto en llegar. Para cada punto se resuelve <span class="f">c(t − t<sub>e</sub>) = |r(t<sub>e</sub>)|</span> y se dibuja donde estaba al emitir.</li>
+        <li><b>Rotación de Terrell–Penrose.</b> Un objeto visto bajo un ángulo pequeño no parece aplastado sino girado unos arcsin β: ves su cara trasera. Una esfera mantiene el contorno circular. Al acercarse el objeto parece estirado y al alejarse, comprimido.</li>
+        <li>Las siluetas de referencia se colocan en la posición de la que salió la luz del centro, para comparar solo la forma. El mapa de la esquina muestra la escena desde arriba: dónde está el objeto <i>ahora</i> y desde dónde salió la luz que ves.</li>
+      </ul>
+    </details>
+  </div>
+  <aside class="panel" aria-label="Controles de objetos">
+    <div class="group">
+      <h3>Objeto</h3>
+      <div class="seg" id="o-shape"><button data-v="cubo" aria-pressed="true">Cubo</button><button data-v="esfera" aria-pressed="false">Esfera</button><button data-v="tren" aria-pressed="false">Tren</button><button data-v="regla" aria-pressed="false">Regla</button></div>
+      <div class="ctl"><div class="row"><label for="o-beta">Velocidad β</label><output id="o-beta-v"></output></div><input type="range" id="o-beta" min="0" max="0.995" step="0.001" value="0.9"></div>
+      <div class="ctl"><div class="row"><label for="o-time">Tiempo</label><output id="o-time-v"></output></div><input type="range" id="o-time" min="-1.6" max="1.6" step="0.001" value="0.35"></div>
+      <div class="btns"><button class="btn primary" id="o-play">Reproducir</button></div>
+    </div>
+    <div class="group">
+      <h3>Capas</h3>
+      <div class="checks">
+        <label><input type="checkbox" id="o-vis" checked> Lo que ve la cámara</label>
+        <label><input type="checkbox" id="o-meas" checked> Forma medida (contraída)</label>
+        <label><input type="checkbox" id="o-gal"> Sin relatividad (forma en reposo)</label>
+        <label><input type="checkbox" id="o-dopp" checked> Color Doppler</label>
+        <label><input type="checkbox" id="o-map" checked> Mapa cenital</label>
+      </div>
+    </div>
+    <div class="group">
+      <h3>Valores</h3>
+      <dl class="out" id="o-out"></dl>
+    </div>
+  </aside>
+</section>
+
+<!-- ============ LUZ ============ -->
+<section class="mod" id="mod-luz" hidden>
+  <div class="col">
+    <div class="stage"><canvas id="cv-luz" aria-label="Trayectorias alrededor de un agujero negro"></canvas><div class="hud" id="hud-luz"></div></div>
+    <details class="explain">
+      <summary>Qué estás viendo</summary>
+      <ul>
+        <li>Plano ecuatorial de un agujero negro de Schwarzschild, en unidades de r<sub>s</sub> = 2GM/c². Disco negro: horizonte. Círculo discontinuo: esfera de fotones (1,5 r<sub>s</sub>).</li>
+        <li><b>Luz.</b> La órbita cumple <span class="f">d²u/dφ² + u = (3/2) r<sub>s</sub> u²</span> con u = 1/r. Se integra como una fuerza central ficticia <span class="f">−(3/2) r<sub>s</sub> h² r̂/r⁴</span>, que reproduce exactamente la forma de la geodésica nula. Parámetro de impacto crítico b<sub>c</sub> = (3√3/2) r<sub>s</sub> ≈ 2,598 r<sub>s</sub>.</li>
+        <li><b>Deflexión</b> en campo débil: α ≈ 2r<sub>s</sub>/b + (15π/16)(r<sub>s</sub>/b)². El valor medido integra la geodésica desde ±3000 r<sub>s</sub>.</li>
+        <li><b>Fuente puntual estática.</b> Solo escapa la luz emitida dentro del cono <span class="f">sin ψ<sub>c</sub> = (3√3/2)(r<sub>s</sub>/r)√(1 − r<sub>s</sub>/r)</span>, medido desde la vertical hacia fuera.</li>
+        <li><b>Onda.</b> Una onda plana de longitud λ llega desde la izquierda. Cada multipolo l se integra con la ecuación radial de un campo sin masa de espín s, <span class="f">d²u/dr*² + [ω² − V] u = 0</span>, con <span class="f">V = (1 − r<sub>s</sub>/r)[l(l+1)/r² + (1 − s²) r<sub>s</sub>/r³]</span> para s = 0, 1 y 2 (Regge–Wheeler) y <span class="f">V = W² + dW/dr*</span>, <span class="f">W = (j + ½)√(1 − r<sub>s</sub>/r)/r</span> para s = ½ (Dirac), con onda puramente entrante en el horizonte; la suma de multipolos da el campo. La absorción es <span class="f">σ = (π/ω²) Σ (2l+1) Γ<sub>l</sub></span>: tiende a 27π(GM/c²)² cuando λ ≪ r<sub>s</sub> y cae como ω² cuando λ ≫ r<sub>s</sub>, porque la luz rodea el agujero por difracción. Los multipolos con l &lt; s no existen para ese campo y se dejan como onda libre. El mapa usa una suma escalar con el potencial de cada espín y no representa la polarización ni el carácter espinorial; la absorción sí es la del campo de ese espín. A longitud de onda larga, σ tiende al área del horizonte (s = 0), a un octavo de ella (s = ½, Unruh) o cae como ω² (s = 1) y ω⁴ (s = 2), como en los resultados de Page.</li>
+        <li><b>Órbitas de partículas.</b> <span class="f">u″ + u = r<sub>s</sub>/(2h²) + (3/2) r<sub>s</sub> u²</span>. El término relativista hace precesar el periastro; en campo débil Δφ ≈ 3π r<sub>s</sub>/[a(1−e²)], los 43″ por siglo de Mercurio. Por debajo de la órbita circular estable más interna (3 r<sub>s</sub>) la partícula cae.</li>
+      </ul>
+    </details>
+  </div>
+  <aside class="panel" aria-label="Controles de luz y órbitas">
+    <div class="group">
+      <h3>Modo</h3>
+      <div class="seg" id="l-mode"><button data-v="beam" aria-pressed="true">Haz paralelo</button><button data-v="point" aria-pressed="false">Fuente</button><button data-v="orbit" aria-pressed="false">Órbita</button><button data-v="wave" aria-pressed="false">Onda</button></div>
+    </div>
+    <div class="group" data-for="beam">
+      <h3>Haz de luz</h3>
+      <div class="ctl"><div class="row"><label for="l-n">Número de rayos</label><output id="l-n-v"></output></div><input type="range" id="l-n" min="5" max="81" step="2" value="41"></div>
+      <div class="ctl"><div class="row"><label for="l-bmax">Anchura del haz (± b)</label><output id="l-bmax-v"></output></div><input type="range" id="l-bmax" min="1" max="12" step="0.1" value="7"></div>
+      <div class="ctl"><div class="row"><label for="l-b">Rayo destacado, b</label><output id="l-b-v"></output></div><input type="range" id="l-b" min="0.5" max="15" step="0.001" value="2.7"></div>
+      <dl class="out" id="l-beam-out"></dl>
+    </div>
+    <div class="group" data-for="point" hidden>
+      <h3>Fuente estática</h3>
+      <div class="ctl"><div class="row"><label for="l-re">Radio de la fuente</label><output id="l-re-v"></output></div><input type="range" id="l-re" min="1.02" max="10" step="0.01" value="2.2"></div>
+      <div class="ctl"><div class="row"><label for="l-np">Número de rayos</label><output id="l-np-v"></output></div><input type="range" id="l-np" min="12" max="180" step="1" value="72"></div>
+      <dl class="out" id="l-point-out"></dl>
+    </div>
+    <div class="group" data-for="wave" hidden>
+      <h3>Onda</h3>
+      <div class="ctl"><label>Espín del campo</label>
+      <div class="seg" id="l-spin"><button data-v="0" aria-pressed="false">0</button><button data-v="0.5" aria-pressed="false">½</button><button data-v="1" aria-pressed="true">1 · luz</button><button data-v="2" aria-pressed="false">2 · gravedad</button></div></div>
+      <div class="ctl"><div class="row"><label for="l-lam">Longitud de onda λ</label><output id="l-lam-v"></output></div><input type="range" id="l-lam" min="-0.523" max="1.477" step="0.001" value="0.3"></div>
+      <div class="seg" id="l-wview"><button data-v="int" aria-pressed="true">Intensidad</button><button data-v="wave" aria-pressed="false">Onda en movimiento</button></div>
+      <dl class="out" id="l-wave-out"></dl>
+      <div class="chartwrap" style="height:140px"><canvas id="l-sigma" aria-label="Absorción frente a longitud de onda"></canvas></div>
+      <p class="small" style="margin:0">Absorción respecto al límite de la óptica de rayos, 27π(GM/c²)², en función de λ, para el espín elegido. El punto marca la λ elegida.</p>
+    </div>
+    <div class="group" data-for="orbit" hidden>
+      <h3>Órbita de una partícula</h3>
+      <div class="ctl"><div class="row"><label for="l-rp">Periastro</label><output id="l-rp-v"></output></div><input type="range" id="l-rp" min="2" max="40" step="0.1" value="8"></div>
+      <div class="ctl"><div class="row"><label for="l-ra">Apoastro</label><output id="l-ra-v"></output></div><input type="range" id="l-ra" min="2" max="80" step="0.1" value="20"></div>
+      <div class="ctl"><div class="row"><label for="l-spd">Velocidad de la animación</label><output id="l-spd-v"></output></div><input type="range" id="l-spd" min="0.2" max="8" step="0.1" value="2"></div>
+      <div class="btns"><button class="btn primary" id="l-launch">Relanzar</button></div>
+      <dl class="out" id="l-orbit-out"></dl>
+    </div>
+    <div class="group">
+      <div class="ctl"><div class="row"><label for="l-zoom">Zoom (semiancho)</label><output id="l-zoom-v"></output></div><input type="range" id="l-zoom" min="3" max="60" step="0.5" value="11"></div>
+    </div>
+  </aside>
+</section>
+
+<!-- ============ AGUJERO NEGRO ============ -->
+<section class="mod" id="mod-agujero" hidden>
+  <div class="col">
+    <div class="stage"><canvas id="cv-bh" aria-label="Vista trazada de un agujero negro con disco de acreción"></canvas><div class="hud" id="hud-bh"></div><div class="hint">Arrastra para mirar alrededor</div>
+      <div class="note" id="bh-note" hidden></div></div>
+    <details class="explain">
+      <summary>Qué estás viendo</summary>
+      <ul>
+        <li>Cada píxel traza un rayo de luz hacia atrás en la métrica de Schwarzschild (r<sub>s</sub> = 1). Los rayos que caen dentro del horizonte dan la sombra: en un agujero real es la imagen congelada de la estrella que colapsó, tan enrojecida que es negra; los que rozan la esfera de fotones forman el anillo fino.</li>
+        <li><b>Disco de acreción</b> delgado, de 3 r<sub>s</sub> (órbita circular estable más interna) a 14 r<sub>s</sub>, con perfil <span class="f">T ∝ r<sup>−3/4</sup>(1 − √(r<sub>in</sub>/r))<sup>1/4</sup></span>. El factor <span class="f">g = √(1 − 3r<sub>s</sub>/2r)/(1 − Ωℓ)</span> junta Doppler, haz relativista y corrimiento gravitatorio; cada punto se dibuja como un cuerpo negro a g·T. El lado que se acerca es más brillante y azulado.</li>
+        <li><b>Observador estático</b>: ve la luz lejana desplazada al azul por 1/√(1 − r<sub>s</sub>/r). <b>En caída libre</b> desde el reposo en el infinito: se mueve a β = √(r<sub>s</sub>/r) respecto al estático local; la aberración encoge la sombra y la luz de arriba le llega enrojecida (×1/2 en el horizonte).</li>
+        <li><b>Qué ve el que cae.</b> De frente, la sombra y el anillo de luz, más pequeños que para un observador quieto, porque la aberración comprime lo que tiene delante. Hacia atrás, el universo exterior enrojecido: la luz le llega con frecuencia ×1/(1+β), la mitad al cruzar el horizonte. De lado, el borde de la sombra con el cielo muy deformado: azul hacia delante y rojo hacia atrás.</li>
+        <li><b>Observador externo.</b> Ve caer una sonda luminosa que destella cada r<sub>s</sub>/c de su propio reloj. Para cada píxel se integra también el tiempo de coordenadas a lo largo del rayo, <span class="f">dt/dλ = 1/(1 − r<sub>s</sub>/r)</span>, y se dibuja la sonda donde estaba al emitir. Su luz llega con <span class="f">g = (1 − r<sub>s</sub>/r)/(1 − ṙ√(r<sub>s</sub>/r))</span> respecto a un observador lejano. Los destellos se espacian, la sonda enrojece y se congela sobre el horizonte, apagándose un factor e cada 2r<sub>s</sub>/c.</li>
+        <li>Tiempo propio de caída: <span class="f">τ = (2/3)(r<sub>s</sub>/c)[(r/r<sub>s</sub>)<sup>3/2</sup> − 1]</span> hasta el horizonte. Marea sobre un cuerpo de 2 m: <span class="f">Δa = 2GM·L/r³</span>.</li>
+        <li><b>Dentro del horizonte.</b> El que cae se describe en coordenadas de Painlevé–Gullstrand, válidas a ambos lados del horizonte: el espacio «fluye» hacia dentro a √(r<sub>s</sub>/r)·c y la luz se mueve a c respecto a ese flujo. Para cada píxel, el rayo hacia atrás arranca con velocidad <span class="f">n + √(r<sub>s</sub>/r) r̂</span> y la luz del exterior llega con frecuencia ×1/(1 + n<sub>r</sub>√(r<sub>s</sub>/r)). Dentro, la luz que llega desde un cono justo debajo tiene energía de Killing negativa. En un agujero real procede de la estrella que colapsó: es luz que la estrella emitió «hacia fuera» después de cruzar el horizonte. Esa luz también cae, pero más despacio que tú, así que la alcanzas. Para quien cae mucho después del colapso está enrojecida de forma exponencial, por eso se dibuja negra. (En la solución eterna idealizada vendría del «otro universo» de la extensión de Kruskal.)</li>
+        <li>Al cruzar el horizonte no se ve nada especial: el cielo exterior sigue arriba, se va estrechando en un disco cada vez más enrojecido y la oscuridad de abajo crece hasta ocupar casi todo. A los pies de la escala, la singularidad llega en (2/3)(r/r<sub>s</sub>)<sup>3/2</sup> r<sub>s</sub>/c de tiempo propio.</li>
+      </ul>
+    </details>
+  </div>
+  <aside class="panel" aria-label="Controles del agujero negro">
+    <div class="group">
+      <h3>Posición</h3>
+      <div class="seg" id="b-obs" aria-label="Punto de vista"><button data-v="static" aria-pressed="true">Estático</button><button data-v="fall" aria-pressed="false">El que cae</button><button data-v="ext" aria-pressed="false">Externo</button></div>
+      <div class="ctl"><div class="row"><label for="b-r" id="b-r-lab">Distancia al centro</label><output id="b-r-v"></output></div><input type="range" id="b-r" min="0" max="1000" step="1" value="946"></div>
+      <div class="ctl"><div class="row"><label for="b-el">Altura sobre el disco</label><output id="b-el-v"></output></div><input type="range" id="b-el" min="0" max="85" step="0.5" value="8"></div>
+      <div class="btns"><button class="btn primary" id="b-fall">Dejarse caer</button></div>
+      <div class="btns"><button class="btn" data-blook="0">Mirar al agujero</button><button class="btn" data-blook="90">Al lado</button><button class="btn" data-blook="180">Atrás</button></div>
+    </div>
+    <div class="group">
+      <h3>Escena</h3>
+      <div class="checks">
+        <label><input type="checkbox" id="b-disk" checked> Disco de acreción</label>
+        <label><input type="checkbox" id="b-spin" checked> Disco girando (pide más a la gráfica)</label>
+        <label><input type="checkbox" id="b-shift" checked> Desplazamientos Doppler y gravitatorio</label>
+        <label><input type="checkbox" id="b-k"> Exagerar el color (falso color: matiz según g³ y más saturado; brillo real)</label>
+        <label><input type="checkbox" id="b-grid"> Cuadrícula celeste en lugar de estrellas</label>
+      </div>
+      <div class="ctl"><div class="row"><label for="b-T">Temperatura máxima del disco</label><output id="b-T-v"></output></div><input type="range" id="b-T" min="3.4" max="4.6" step="0.01" value="3.72"></div>
+      <div class="ctl"><div class="row"><label for="b-exp">Exposición</label><output id="b-exp-v"></output></div><input type="range" id="b-exp" min="-1.5" max="1.5" step="0.01" value="0"></div>
+      <div class="ctl"><div class="row"><label for="b-fov">Campo de visión</label><output id="b-fov-v"></output></div><input type="range" id="b-fov" min="20" max="140" step="1" value="60"></div>
+      <div class="ctl"><label for="b-q">Calidad de imagen</label><select id="b-q"><option value="0.35">Baja (rápida)</option><option value="0.5">Media</option><option value="0.75">Alta</option><option value="1">Máxima</option></select></div>
+    </div>
+    <div class="group">
+      <h3>Física para un agujero real</h3>
+      <div class="ctl"><label for="b-mass">Masa</label><select id="b-mass">
+        <option value="10">Estelar · 10 masas solares</option>
+        <option value="4.3e6" selected>Sagitario A* · 4,3 millones</option>
+        <option value="6.5e9">M87* · 6500 millones</option>
+      </select></div>
+      <dl class="out" id="b-out"></dl>
+    </div>
+  </aside>
+</section>
+</main>
+<footer>Unidades geométricas: c = 1; en los módulos de gravedad las distancias van en radios de Schwarzschild r<sub>s</sub>. Colores calculados como cuerpo negro en 610, 550 y 465 nm, con blanco a 6500 K.</footer>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
+
+/* ---------- formato ---------- */
+const SUP = {'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+const sup = e => String(e).split('').map(c => SUP[c]).join('');
+function sci(x, n = 3){
+  if (!isFinite(x)) return '∞';
+  if (x === 0) return '0';
+  const a = Math.abs(x);
+  if (a >= 1e-3 && a < 1e6) return x.toLocaleString('es-ES', {maximumSignificantDigits:n});
+  let e = Math.floor(Math.log10(a)); let m = x / Math.pow(10, e);
+  if (Math.abs(m) >= 9.9995){ m /= 10; e++; }
+  return m.toLocaleString('es-ES', {maximumSignificantDigits:n}) + '·10' + sup(e);
+}
+const fx = (x, d) => x.toLocaleString('es-ES', {minimumFractionDigits:d, maximumFractionDigits:d});
+function fmtYears(y){
+  if (y < 1/365.25){ const h = y*8766; return h < 1 ? sci(h*60)+' min' : sci(h)+' h'; }
+  if (y < 1) return sci(y*365.25)+' días';
+  return sci(y, y < 1e6 ? 3 : 3)+' años';
+}
+function fmtSec(s){
+  if (s < 1e-3) return sci(s*1e6)+' µs';
+  if (s < 1) return sci(s*1e3)+' ms';
+  if (s < 120) return sci(s)+' s';
+  if (s < 7200) return sci(s/60)+' min';
+  if (s < 172800) return sci(s/3600)+' h';
+  if (s < 6.3e7) return sci(s/86400)+' días';
+  return sci(s/3.156e7)+' años';
+}
+function fmtBeta(eta){
+  if (eta < 2.6) return 'β = ' + fx(Math.tanh(eta), 4);
+  return '1 − β = ' + sci(2/(Math.exp(2*eta)+1));
+}
+const fmtGamma = g => g < 1e5 ? g.toLocaleString('es-ES',{maximumSignificantDigits:4}) : sci(g);
+
+/* ---------- cuerpo negro ---------- */
+const LAM = [610, 550, 465];
+function planck(l, T){
+  if (!(T > 1)) return 0;
+  const x = 1.4388e7/(l*T);
+  if (x > 80) return 0;
+  const em = x < 1e-4 ? x*(1+0.5*x) : Math.expm1(x);
+  const s = l/500;
+  return 1/(s*s*s*s*s*em);
+}
+const REF = LAM.map(l => planck(l, 6500));
+const bb = T => [planck(610,T)/REF[0], planck(550,T)/REF[1], planck(465,T)/REF[2]];
+const tone = (v, E) => Math.pow(1 - Math.exp(-Math.max(v,0)*E), 1/2.2);
+// tono que conserva el matiz: comprime el canal más brillante y escala los demás igual
+function toneRGB(r, g, b, E){ const m = Math.max(r, g, b); if (!(m > 0)) return [0,0,0]; const k = (1 - Math.exp(-m*E))/m; return [Math.pow(r*k,1/2.2), Math.pow(g*k,1/2.2), Math.pow(b*k,1/2.2)]; }
+function hueOf(T){ const c = bb(T); const m = Math.max(c[0],c[1],c[2]) || 1; return c.map(v => Math.round(255*Math.pow(v/m, 1/2.2))); }
+
+/* ---------- utilidades ---------- */
+function fitCanvas(cv, scale = 1){
+  const r = cv.getBoundingClientRect();
+  const k = DPR()*scale;
+  const w = Math.max(2, Math.round(r.width*k)), h = Math.max(2, Math.round(r.height*k));
+  if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; return true; }
+  return false;
+}
+function compile(gl, type, src){
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(gl, vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl, gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++){ const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+  p.u = u; return p;
+}
+function noGL(cv, err){
+  const st = cv.parentElement; const d = document.createElement('div'); d.className = 'note';
+  d.innerHTML = '<b>Este módulo necesita WebGL.</b> Tu navegador no lo ha podido activar' + (err ? ' ('+String(err).slice(0,120)+')' : '') + '. Prueba con otro navegador o activa la aceleración por hardware.';
+  st.appendChild(d);
+}
+function drag(el, fn){
+  let last = null;
+  el.addEventListener('pointerdown', e => { last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', e => { if (!last) return; const dx = e.clientX-last[0], dy = e.clientY-last[1]; last = [e.clientX, e.clientY]; fn(dx, dy); });
+  const end = () => { last = null; };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+}
+const cross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+const norm = a => { const l = Math.hypot(a[0],a[1],a[2]); return [a[0]/l,a[1]/l,a[2]/l]; };
+const lin = (a,ka,b,kb) => [a[0]*ka+b[0]*kb, a[1]*ka+b[1]*kb, a[2]*ka+b[2]*kb];
+function rotBasis(R, U, F, yaw, pitch){
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const F1 = lin(F,cy,R,sy), R1 = lin(R,cy,F,-sy);
+  const F2 = lin(F1,cp,U,sp), U2 = lin(U,cp,F1,-sp);
+  return [R1, U2, F2];
+}
+function range(id, fn, fmt){
+  const el = $('#'+id), out = $('#'+id+'-v');
+  const upd = (silent) => { const v = parseFloat(el.value); if (out && fmt) out.textContent = fmt(v); if (!silent) fn(v); };
+  el.addEventListener('input', () => upd(false));
+  upd(true);
+  return {el, set(v){ el.value = v; upd(true); }};
+}
+function check(id, fn){ const el = $('#'+id); el.addEventListener('change', () => fn(el.checked)); return el; }
+function seg(id, fn){
+  const box = $('#'+id); const bs = Array.from(box.querySelectorAll('button'));
+  const set = v => bs.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  bs.forEach(b => b.addEventListener('click', () => { set(b.dataset.v); fn(b.dataset.v); }));
+  return {set};
+}
+function rng(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+const GLSL_BB = `
+float pl(float l, float T){
+  if (T < 1.0) return 0.0;
+  float x = 1.4388e7/(l*T);
+  if (x > 80.0) return 0.0;
+  float em = x < 1e-3 ? x*(1.0+0.5*x) : exp(x)-1.0;
+  float s = l/500.0;
+  return 1.0/(s*s*s*s*s*em);
+}
+vec3 bb(float T){ return vec3(pl(610.0,T)/uRef.x, pl(550.0,T)/uRef.y, pl(465.0,T)/uRef.z); }
+`;
+const PLC_GLSL = `
+float plw(float l){ float x = 1.4388e7/(l*6500.0); float s = l/500.0; return 1.0/(s*s*s*s*s*(exp(x) - 1.0)); }
+vec3 plc(float al){ return vec3(pow(610.0/550.0, al - 2.0)*plw(550.0)/plw(610.0), 1.0, pow(465.0/550.0, al - 2.0)*plw(550.0)/plw(465.0)); }
+`;
+const PREC = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+`;
+const VS_QUAD = `attribute vec2 aP; void main(){ gl_Position = vec4(aP,0.0,1.0); }`;
+
+/* =====================================================================
+   1. VIAJE INTERESTELAR
+   ===================================================================== */
+const Viaje = (() => {
+  const cv = $('#cv-viaje');
+  const S = {eta:1.5, yaw:0, pitch:0, fov:80, exp:Math.pow(10,0.9), aberr:true, dopp:true, beam:true, cmb:true, dirty:true, trip:null, sky:'real', cons:true, names:true,
+             nb:{explore:false, az:0, el:0, R:Math.pow(10,0.4), gain:Math.pow(10,1.1), eye:false}, ps:{on:false, slow:30, ph:0, f:0}, nebKey:''};
+  let gl, pCmb, pPt, pReal, pLine, pNeb, pComp, quad, buf, maxPt = 64, fbo = null, fboTex = null, fboW = 0, fboH = 0;
+  // ---------- Nebulosa de Orión (M42): modelo 3D ----------
+  // Coordenadas locales en pc con origen en θ¹ Ori C: x hacia el oeste, y hacia el norte, z hacia el Sol.
+  // Forma según Wen y O'Dell (1995) y O'Dell et al. (2009, 2020): frente de ionización cóncavo detrás
+  // de la estrella, Barra Brillante al SE, nube Orión-S al SO, velo neutro delante con la Bahía Oscura,
+  // nebulosa extendida hacia el sur y M43 al norte. Los grumos y filamentos son sintéticos.
+  // Nebulosas planetarias, en el mismo marco (origen en la enana blanca central):
+  //  · Anillo (M57): barril prolato con los polos abiertos, visto casi por el eje (inclinado ~30°), con
+  //    estratificación de ionización: He II en el centro, [O III] dentro y [N II] en el borde (O'Dell et al. 2013);
+  //    halo tenue de filamentos. Orientación aproximada.
+  //  · Hélice (NGC 7293): disco grueso interior inclinado ~23° con núcleo de [O III], anillo exterior en otro
+  //    plano (O'Dell et al. 2004; Meaburn et al. 2005) y nudos cometarios sintéticos con la cabeza de polvo y la
+  //    cúspide ionizada hacia la estrella y la cola hacia fuera. Orientación aproximada.
+  const OBJS = [
+    {id:'m42', C:[-321.732840,-178.417980,-129.440610], X:[0.039482,0.539148,-0.841285], Y:[-0.563816,0.707127,0.426712], Z:[0.824956,0.457482,0.331899], RB:7.0, K:1},
+    {id:'anillo', C:[346.0027018564, 684.0815029170, 190.8261714627], X:[0.255774529299, -0.377618064585, 0.889934822066], Y:[-0.861832101377, 0.327989086939, 0.386870246834], Z:[-0.437978103616, -0.865925950659, -0.241552115776], RB:0.5, K:1, mu:17.0},
+    {id:'cangrejo', C:[-1983.5250335286, -158.1082037983, -201.5694342717], X:[0.042320323151, 0.540408431575, -0.840337858974], Y:[-0.120897065703, 0.837680831832, 0.532611231093], Z:[0.991762516764, 0.079054101899, 0.100784717136], RB:2.35, K:1, mu:17.8},
+    {id:'helice', C:[88.1020724644, 64.3898861729, -168.7986000733], X:[0.827523073254, 0.220862198975, 0.516164171858], Y:[-0.350830757547, 0.921193380915, 0.168287059861], Z:[-0.438318768480, -0.320347692402, 0.839794030215], RB:0.95, K:1, mu:21.0},
+    {id:'pleyades', C:[1e6, 0, 0], X:[0, 1, 0], Y:[0, 0, 1], Z:[1, 0, 0], RB:4.0, K:1},
+    {id:'hiades', C:[1e6, 0, 0], X:[0, 1, 0], Y:[0, 0, 1], Z:[1, 0, 0], RB:0, K:1},
+  ];
+  const NEB = OBJS[0];
+  const NEB_GLSL = `
+    uniform vec3 uNC[6], uNX[6], uNY[6], uNZ[6], uOL[6];
+    uniform float uRB[6], uKo[6];
+    float gOb;
+    float nh(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7)))*43758.5453); }
+    float nnoise(vec3 p){
+      vec3 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
+      return mix(mix(mix(nh(i), nh(i+vec3(1.0,0.0,0.0)), f.x), mix(nh(i+vec3(0.0,1.0,0.0)), nh(i+vec3(1.0,1.0,0.0)), f.x), f.y),
+                 mix(mix(nh(i+vec3(0.0,0.0,1.0)), nh(i+vec3(1.0,0.0,1.0)), f.x), mix(nh(i+vec3(0.0,1.0,1.0)), nh(i+vec3(1.0,1.0,1.0)), f.x), f.y), f.z);
+    }
+    float nfbm(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 3; i++){ s += a*nnoise(p); p = p*2.07 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s/0.875; }
+    // superficie del frente de ionización principal: la nube molecular queda detrás (z < zs)
+    float zs(vec2 q){
+      float r2 = dot(q, q);
+      float z = -0.22 + 0.25*r2/(1.0 + 2.0*r2);               // cuenco cóncavo abierto hacia nosotros
+      vec2 d0 = q - vec2(-0.17, -0.17);
+      float u = dot(d0, vec2(-0.7071, -0.7071)), w = dot(d0, vec2(0.7071, -0.7071));
+      return z + 0.22*smoothstep(-0.02, 0.03, u)*exp(-w*w/0.05);   // Barra Brillante: el frente se levanta, casi de canto
+    }
+    // factor 1/√(1 + |∇zs|²): pasa de altura vertical a distancia perpendicular al frente
+    float zsSlope(vec2 q){
+      float r2 = dot(q, q), k = 0.25/((1.0 + 2.0*r2)*(1.0 + 2.0*r2));
+      vec2 g = 2.0*k*q;
+      vec2 d0 = q - vec2(-0.17, -0.17);
+      float u = dot(d0, vec2(-0.7071, -0.7071)), w = dot(d0, vec2(0.7071, -0.7071)), t = clamp((u + 0.02)/0.05, 0.0, 1.0);
+      g += 0.22*6.0*t*(1.0 - t)/0.05*exp(-w*w/0.05)*vec2(-0.7071, -0.7071);
+      return inversesqrt(1.0 + dot(g, g));
+    }
+    // opacidad por pc en V
+    float absorb(vec3 p, float detail){
+      float a = 0.0;
+      float s = zs(p.xy);
+      float e = length(p/vec3(3.0, 6.5, 2.2));                // nube molecular OMC-1 / Orión A, alargada de norte a sur
+      if (e < 1.0 && p.z < s + 0.05){
+        float sd = s + (detail > 0.5 ? 0.07*(nfbm(vec3(p.xy*3.0, 0.0)) - 0.5) : 0.0);
+        a += 60.0*smoothstep(0.0, 0.04, sd - p.z)*(1.0 - smoothstep(0.8, 1.0, e));
+      }
+      a += 80.0*(1.0 - smoothstep(0.045, 0.065, length(p - vec3(0.07, -0.08, -0.10))));   // Orión-S
+      float dz = p.z - 0.9;
+      if (abs(dz) < 0.3){                                          // velo neutro delante, con la Bahía Oscura al NE
+        vec2 b = p.xy - vec2(-0.32, 0.38);
+        float v = exp(-dz*dz/0.0064)*step(length(p.xy/vec2(2.5, 3.0)), 1.0);
+        a += v*(6.0 + 18.0*exp(-dot(b, b)/0.06))*(detail > 0.5 ? 0.6 + 0.8*nfbm(p*4.0) : 1.0);
+      }
+      return a;
+    }
+    // emisividad: (Hα + [N II], [O III])
+    vec2 emit(vec3 p, float detail){
+      vec2 e = vec2(0.0);
+      float r2 = dot(p, p);
+      if (r2 < 2.2){
+        float s = zs(p.xy) + (detail > 0.5 ? 0.07*(nfbm(vec3(p.xy*3.0, 0.0)) - 0.5) : 0.0);
+        float h = (p.z - s)*zsSlope(p.xy);
+        if (h > 0.0 && h < 0.8){
+          float ill = 1.0/(r2 + 0.015);                       // iluminación de θ¹ Ori C
+          float cl = detail > 0.5 ? max(0.55 + 0.9*(nfbm(p*7.0) - 0.5), 0.05) : 0.55;
+          float bub = smoothstep(0.05, 0.11, sqrt(r2));        // burbuja central vaciada por el viento
+          float ha = exp(-h/0.045);                            // capa fina junto al frente: Hα y [N II]
+          float o3 = exp(-h/0.14)*(1.0 - exp(-h/0.04))*exp(-r2/0.35);   // más ionizado, más cerca de la estrella
+          float edge = (1.0 - smoothstep(0.9, 2.2, r2))*(detail > 0.5 ? 0.45 + 1.1*nfbm(p*1.3 + vec3(4.0)) : 1.0);   // contorno irregular
+          e += vec2(ha, 0.8*o3)*ill*cl*bub*edge;
+        }
+        float dS = length(p - vec3(0.07, -0.08, -0.10));      // piel ionizada de Orión-S
+        if (dS > 0.06) e.x += 0.7*exp(-(dS - 0.06)/0.015)/(r2 + 0.015)*(detail > 0.5 ? 0.4 + 1.2*nfbm(p*18.0) : 1.0);
+      }
+      vec3 q = (p - vec3(0.0, -0.9, -0.15))/vec3(1.4, 1.9, 1.0); float rq = length(q);   // nebulosa extendida
+      if (rq < 1.3){
+        float wq = (rq - 1.0)/0.12; e.x += 0.02*exp(-wq*wq)*(detail > 0.5 ? smoothstep(0.45, 0.8, nfbm(p*2.2 + vec3(7.0)))*2.5 : 1.0);
+        e += vec2(0.008, 0.002)*(1.0 - smoothstep(0.5, 1.0, rq))*(detail > 0.5 ? 0.3 + 1.4*nfbm(p*1.7) : 1.0);
+      }
+      vec3 m = p - vec3(0.05, 0.85, -0.25); float dm2 = dot(m, m);                         // M43
+      if (dm2 < 0.12) e.x += 0.9*exp(-dm2/0.012)*(detail > 0.5 ? 0.6 + 0.8*nfbm(p*6.0) : 1.0);
+      return e;
+    }
+    vec3 toLocal(vec3 g){ vec3 r = g - uNC[0]; return vec3(dot(r, uNX[0]), dot(r, uNY[0]), dot(r, uNZ[0])); }
+    // ---- Anillo (M57) ----
+    const vec3 RG1 = vec3(-0.8660, 0.5, 0.0), RG2 = vec3(-0.4330, -0.75, -0.5), RG3 = vec3(-0.25, -0.4330, 0.8660);
+    float gs(float x){ return exp(-x*x); }
+    vec3 emitRing(vec3 p, float detail){
+      vec3 q = vec3(dot(p, RG1), dot(p, RG2), dot(p, RG3))/vec3(0.165, 0.14, 0.27);
+      float rho = length(q), e2 = dot(p, p);
+      vec3 e = vec3(0.0);
+      if (rho < 1.3){
+        float c2 = q.z*q.z/max(rho*rho, 1e-6), wall = 0.05 + 0.95*(1.0 - c2)*(1.0 - c2);   // polos abiertos
+        float cl = detail > 0.5 ? 0.4 + 1.2*nfbm(p*30.0) : 1.0;
+        float n2 = gs((rho - 0.93)/0.07), ha = gs((rho - 0.84)/0.12), o3 = gs((rho - 0.74)/0.14), he = gs(rho/0.5);
+        e += vec3((0.9*n2 + 0.6*ha)*wall*cl, 1.3*o3*wall*cl + 0.05*he, 0.22*he*(0.5 + 0.5*wall));
+      }
+      float rr = sqrt(e2);
+      if (rr > 0.17 && rr < 0.45){                                             // halo interior de filamentos
+        vec3 w = p*14.0 + 1.5*vec3(nnoise(p*6.0 + 3.1), nnoise(p*6.0 + 7.3), nnoise(p*6.0 + 1.7));   // dominio deformado: filamentos sin cuadrícula
+        float h = 0.003*gs((rr - 0.30)/0.07)*(1.0 - smoothstep(0.38, 0.45, rr))*(detail > 0.5 ? 2.5*smoothstep(0.42, 0.8, nfbm(w)) : 1.0);
+        e += vec3(h, 0.35*h, 0.0);
+      }
+      return e;
+    }
+    // ---- Hélice (NGC 7293) ----
+    const vec3 HN1 = vec3(0.3384, 0.1954, 0.9205), HN2 = vec3(-0.2638, 0.8477, 0.4603);
+    const float KC = 0.03;
+    vec3 sgn(vec3 v){ return (step(0.0, v)*2.0 - 1.0)*max(abs(v), vec3(1e-5)); }
+    // nudo cometario de la celda que contiene p: emisión, absorción, distancia segura y salida de la celda
+    void knot(vec3 p, vec3 v, out vec3 ek, out float ak, out float dK, out float tex){
+      ek = vec3(0.0); ak = 0.0; dK = 1.0;
+      vec3 cell = floor(p/KC), lo = cell*KC, hi = lo + KC;
+      vec3 tq = (mix(lo, hi, step(0.0, v)) - p)/sgn(v); tex = min(tq.x, min(tq.y, tq.z));
+      vec3 H = lo + KC*(0.5 + 0.55*(vec3(nh(cell + vec3(11.3, 0.0, 0.0)), nh(cell + vec3(0.0, 27.1, 0.0)), nh(cell + vec3(0.0, 0.0, 5.7))) - 0.5));
+      float rr = length(H), hh = dot(H, HN1), rp = sqrt(max(rr*rr - hh*hh, 0.0));
+      float prob = 0.75*smoothstep(0.12, 0.17, rp)*(1.0 - smoothstep(0.28, 0.42, rp))*exp(-hh*hh/0.008);
+      if (nh(cell) >= prob) return;
+      vec3 td = H/rr;
+      float rh = 0.0022 + 0.0016*nh(cell + vec3(3.1, 7.7, 1.3));
+      vec3 te = (mix(lo, hi, step(0.0, td)) - H)/sgn(td);
+      float L = clamp(min(te.x, min(te.y, te.z)) - rh, 0.0, 0.004 + 0.012*nh(cell + vec3(8.2, 2.9, 6.4)));
+      vec3 d = p - H; float ax = dot(d, td), s = clamp(ax, 0.0, L), dh = length(d), dc = length(d - s*td);
+      dK = dc - rh - 0.0012;
+      float il = 0.0625/(rr*rr), mu = -ax/max(dh, 1e-6);
+      ak = 300.0*(1.0 - smoothstep(0.75*rh, rh, dh));                          // cabeza de polvo y gas molecular
+      float sh = (dh - rh)/0.0007;
+      ek = vec3(110.0, 3.0, 0.0)*il*exp(-sh*sh)*smoothstep(0.05, 0.85, mu);     // cúspide ionizada, hacia la estrella
+      if (ax > 0.0 && dc < rh) ek.x += 6.0*il*(1.0 - smoothstep(0.5*rh, rh, dc))*exp(-1.5*s/max(L, 1e-4));   // cola en la sombra
+    }
+    vec3 emitHelix(vec3 p, float detail){
+      float r2 = dot(p, p), r = sqrt(r2), h1 = dot(p, HN1), rp = sqrt(max(r2 - h1*h1, 0.0));
+      float h2 = dot(p, HN2), rp2 = sqrt(max(r2 - h2*h2, 0.0));
+      float cl = detail > 0.5 ? 0.35 + 1.3*nfbm(p*16.0) : 1.0;
+      float ring = gs((rp - 0.33)/0.075)*exp(-h1*h1/0.012);                     // disco interior grueso
+      float o3 = exp(-r2/0.055)*(0.4 + 0.6*smoothstep(0.03, 0.18, r));          // núcleo de [O III]
+      float ring2 = gs((rp2 - 0.56)/0.06)*exp(-h2*h2/0.005);                    // anillo exterior, en otro plano
+      float hal = gs((r - 0.78)/0.1);
+      return cl*vec3(1.6*ring + 0.25*o3 + 0.6*ring2 + 0.03*hal, 0.9*o3 + 0.08*ring + 0.05*ring2, 0.25*exp(-r2/0.012));
+    }
+    // ---- Cangrejo (M1): sincrotrón + filamentos ----
+    // elipsoide prolato, eje mayor hacia AP ≈ 125° e inclinado ~30° respecto al plano del cielo (Hester 2008)
+    const vec3 CB1 = vec3(-0.7093, -0.4971, 0.5), CB2 = vec3(0.5736, -0.8192, 0.0), CB3 = vec3(0.4096, 0.2868, 0.8660);
+    const mat3 RM = mat3(0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64);
+    float ridge(vec3 w){ return 1.0 - abs(nnoise(w) + nnoise(RM*w*1.13 + 3.7) - 1.0); }   // dos redes giradas: sin cuadrícula
+    // devuelve (Hα+[N II]+[S II], [O III], He I 588, sincrotrón en V) y el índice espectral α
+    vec4 emitCrab(vec3 p, out float al, out float a){
+      vec3 b = vec3(dot(p, CB1), dot(p, CB2), dot(p, CB3)), q = b/vec3(2.0, 1.45, 1.45);
+      float rho = length(q); vec4 e = vec4(0.0); al = 0.6 + 0.45*smoothstep(0.15, 0.95, rho); a = 0.0;
+      if (rho > 1.08) return e;
+      // sincrotrón: relleno, más brillante hacia el púlsar; toro de las «ondulaciones» alrededor del eje de giro
+      float r2 = dot(p, p), ax = dot(p, CB1), rt = sqrt(max(r2 - ax*ax, 0.0));
+      float tor = gs((rt - 0.14)/0.05)*gs(ax/0.05);
+      float jet = gs(rt/0.025)*smoothstep(0.0, 0.05, -ax)*(1.0 - smoothstep(0.2, 0.45, -ax));
+      e.w = (1.0 - smoothstep(0.78, 1.0, rho))*(0.3 + 0.7*exp(-rho*rho/0.18))*(0.75 + 0.5*nnoise(p*2.5)) + 2.5*tor + 0.8*jet + 0.6*exp(-r2/0.01);
+      // filamentos: red de crestas en la capa externa, con dedos de Rayleigh-Taylor hacia dentro
+      if (rho > 0.45){
+        vec3 w = p*3.0 + 1.6*vec3(nnoise(p*1.3 + 2.0), nnoise(p*1.3 + 5.0), nnoise(p*1.3 + 9.0));
+        float f = ridge(w), f2 = ridge(RM*w*2.3 + 4.0);
+        f = pow(f, 32.0) + 0.5*pow(f2, 36.0);
+        f *= smoothstep(0.55, 0.9, rho)*(1.0 - smoothstep(0.98, 1.06, rho));
+        float c = nnoise(p*1.1 + 13.0);                                   // composición variable
+        e.xyz = 65.0*f*vec3(1.0, 0.1 + 0.9*smoothstep(0.62, 0.85, c), 0.1 + 0.35*smoothstep(0.55, 0.25, c));
+        a = 8.0*f;                                                        // polvo de los filamentos
+      }
+      return e;
+    }
+    // ---- Pléyades: nube de polvo que el cúmulo atraviesa por casualidad (Gibson y Nordsieck 2003) ----
+    // una capa algo por delante de las estrellas, más densa hacia Mérope, con estrías alargadas; geometría aproximada
+    uniform vec3 uDc;
+    float dustP(vec3 p){
+      vec3 q = p - uDc;
+      float h = dot(q, vec3(0.28, -0.19, 0.94)) - 0.15, slab = exp(-h*h/0.12);
+      vec2 c = q.xy - vec2(-0.3*uDc.x, -0.3*uDc.y);
+      float big = exp(-dot(c, c)/1.1) + 1.5*exp(-dot(q, q)/0.08);              // envolvente y condensación junto a Mérope
+      if (slab*big < 0.003) return 0.0;
+      vec3 wq = q + 0.35*vec3(nnoise(q*1.4 + 1.0), nnoise(q*1.4 + 4.0), nnoise(q*1.4 + 7.0));   // estrías deformadas
+      vec2 sq = vec2(dot(wq.xy, vec2(0.766, -0.643)), dot(wq.xy, vec2(0.643, 0.766)));       // a lo largo de AP ≈ 130°
+      float st = pow(ridge(vec3(sq.x*1.2, sq.y*6.0, wq.z*2.0) + 3.0), 5.0);
+      float patch = smoothstep(0.3, 0.75, nfbm(p*1.3 + 5.0));
+      return 0.5*slab*big*(0.1 + 1.3*st*patch + 0.3*patch);
+    }
+    // muestra del objeto gOb en p: emisión (líneas + sincrotrón), índice α, absorción y paso
+    void nebSample(vec3 p, vec3 v, out vec4 e, out float al, out float a, out float dt){
+      al = 0.0;
+      if (gOb < 0.5){
+        float r = length(p);
+        e = vec4(emit(p, 1.0), 0.0, 0.0); a = absorb(p, 1.0); dt = clamp(0.006 + 0.07*max(r - 0.9, 0.0), 0.006, 0.5);
+      } else if (gOb < 1.5){
+        e = vec4(emitRing(p, 1.0), 0.0); a = 0.0;
+        vec3 q = vec3(dot(p, RG1), dot(p, RG2), dot(p, RG3))/vec3(0.165, 0.14, 0.27);
+        dt = length(q) < 1.3 ? 0.0025 : 0.008;
+      } else if (gOb < 2.5){
+        e = emitCrab(p, al, a);
+        vec3 q = vec3(dot(p, CB1), dot(p, CB2), dot(p, CB3))/vec3(2.0, 1.45, 1.45); float rho = length(q);
+        dt = rho > 0.5 && rho < 1.08 ? 0.004 : 0.025;
+        if (dot(p, p) < 0.09) dt = 0.004;
+      } else {
+        e = vec4(emitHelix(p, 1.0), 0.0); a = 0.0;
+        float r2 = dot(p, p), h1 = dot(p, HN1), rp = sqrt(max(r2 - h1*h1, 0.0));
+        dt = r2 < 0.64 ? 0.005 : 0.02;   // (Hélice)
+        if (rp > 0.1 && rp < 0.45 && abs(h1) < 0.2){
+          vec3 ek; float ak, dK, tex;
+          knot(p, v, ek, ak, dK, tex);
+          e.xyz += ek; a += ak; dt = min(dt, min(tex + 0.0004, max(0.6*dK, 0.0006)));
+        }
+      }
+    }`;
+  // la misma física en JavaScript, sin grumos, para calibrar el brillo superficial
+  function nebJS(){
+    const zs = (x, y) => { const r2 = x*x + y*y; let z = -0.22 + 0.25*r2/(1 + 2*r2); const u = (x + 0.17)*-0.7071 + (y + 0.17)*-0.7071, w = (x + 0.17)*0.7071 - (y + 0.17)*0.7071; const t = Math.max(0, Math.min(1, (u + 0.02)/0.05)); return z + 0.22*t*t*(3 - 2*t)*Math.exp(-w*w/0.05); };
+    const emitV = (x, y, z) => {    // contribución al canal V (verde), como en el sombreador
+      const r2 = x*x + y*y + z*z, h = z - zs(x, y);
+      if (!(h > 0 && h < 0.8)) return 0;
+      const ill = 1/(r2 + 0.015), rr = Math.sqrt(r2), tb = Math.max(0, Math.min(1, (rr - 0.05)/0.06)), bub = tb*tb*(3 - 2*tb);
+      const ha = Math.exp(-h/0.045), o3 = Math.exp(-h/0.14)*(1 - Math.exp(-h/0.04))*Math.exp(-r2/0.35);
+      return (ha*(LRESP.ha + 0.35*LRESP.hb) + 0.8*o3*1.33*LRESP.o3)*ill*0.55*bub;
+    };
+    let E = 0, T = 1, z = 2.0; const x = 0.06, y = 0.04, dz = 0.002;
+    for (; z > -0.3; z -= dz){
+      E += T*emitV(x, y, z)*dz;
+      const v = Math.abs(z - 0.9) < 0.3 ? Math.exp(-((z - 0.9)**2)/0.0064)*6.0 : 0;
+      T *= Math.exp(-v*dz);
+    }
+    return E;
+  }
+  // respuesta de los tres canales a una línea (verde ≈ banda V)
+  const respJS = l => [Math.exp(-0.5*((l-610)/45)**2), Math.exp(-0.5*((l-540)/45)**2), Math.exp(-0.5*((l-465)/35)**2)];
+  const LRESP = {ha: respJS(656.3)[1], hb: respJS(486.1)[1], o3: respJS(500.7)[1]};
+  // 16 mag/arcsec² en el centro: 10^(−0,4·(16 − 26,57)) unidades de flujo V por estereorradián
+  const NEB_K = Math.pow(10, -0.4*(16 - 26.57))/nebJS(); OBJS[0].K = NEB_K;
+  const U = (p, n) => p.u[n] !== undefined ? p.u[n] : p.u[n + '[0]'];
+
+  try {
+    gl = cv.getContext('webgl', {antialias:false, alpha:false});
+    if (!gl) throw new Error('sin contexto');
+    pCmb = program(gl, VS_QUAD, PREC + `
+      uniform vec2 uRes; uniform vec3 uR, uU, uF, uRef; uniform float uTan, uEta, uOn;
+      ${GLSL_BB}
+      void main(){
+        vec2 p = (gl_FragCoord.xy - 0.5*uRes)/(0.5*uRes.y);
+        vec3 d = normalize(uR*p.x*uTan + uU*p.y*uTan + uF);
+        float s2 = d.z > 0.0 ? dot(d.xy,d.xy)/(2.0*(1.0+d.z)) : 0.5*(1.0-d.z);
+        float D = 1.0/(exp(uEta)*s2 + exp(-uEta)*(1.0-s2));
+        vec3 c = 0.5*uOn*bb(2.7255*D);
+        float mc = max(c.r, max(c.g, c.b)); c = mc > 0.0 ? c*((1.0 - exp(-mc))/mc) : vec3(0.0);
+        gl_FragColor = vec4(pow(c, vec3(1.0/2.2)), 1.0);
+      }`);
+    pPt = program(gl, `
+      attribute vec2 aPos; attribute float aSize; attribute vec3 aCol; varying vec3 vCol;
+      void main(){ gl_Position = vec4(aPos,0.0,1.0); gl_PointSize = aSize; vCol = aCol; }`,
+      `precision mediump float; varying vec3 vCol;
+      void main(){ vec2 q = gl_PointCoord*2.0-1.0; float r2 = dot(q,q); if (r2 > 1.0) discard; gl_FragColor = vec4(vCol*exp(-r2*3.2), 1.0); }`);
+    quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+    buf = gl.createBuffer();
+    maxPt = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE)[1] || 64;
+    // cielo real: cada estrella se transforma en la GPU desde la posición de la nave
+    const COMMON = `
+      uniform vec3 uShip, uDir, uR, uU, uF, uRef;
+      uniform float uEta, uTan, uAsp, uAb, uDop;
+      ${GLSL_BB}
+      vec3 aberr(vec3 n, out float D){
+        float c = clamp(dot(n, uDir), -1.0, 1.0);
+        vec3 p = n - c*uDir; float s = length(p); p = s > 1e-9 ? p/s : vec3(0.0);
+        vec3 n2 = n;
+        if (uAb > 0.5){
+          float t = c >= 0.0 ? s/(1.0 + c) : (1.0 - c)/max(s, 1e-12);   // tan(θ/2)
+          float t2 = exp(-uEta)*t, q = 1.0 + t2*t2;                      // tan(θ′/2) = e^{−η} tan(θ/2)
+          n2 = ((1.0 - t2*t2)/q)*uDir + (2.0*t2/q)*p;
+        }
+        float ch2 = 0.5*(1.0 + c);
+        D = uDop > 0.5 ? exp(uEta)*ch2 + exp(-uEta)*(1.0 - ch2) : 1.0;  // D = γ(1 + β cos θ)
+        return n2;
+      }`;
+    pReal = program(gl, `
+      attribute vec3 aPos; attribute float aM; attribute float aT;
+      uniform float uExp, uDpr, uMaxPt, uBeam, uK, uNebOn;
+      varying vec3 vCol;
+      ${COMMON}
+      ${NEB_GLSL}
+      ${PLC_GLSL}
+      // profundidad óptica del polvo de la nebulosa entre la nave y la estrella
+      float tauTo(vec3 ship, vec3 star){
+        vec3 o = uOL[0], dv = toLocal(star) - o; float L = length(dv);
+        if (L < 1e-6) return 0.0;
+        vec3 v = dv/L; float b = dot(o, v), c = dot(o, o) - 49.0, disc = b*b - c;
+        if (disc <= 0.0) return 0.0;
+        float sq = sqrt(disc), t0 = max(-b - sq, 0.0), t1 = min(-b + sq, L);
+        if (t1 <= t0) return 0.0;
+        float tau = 0.0, dt = (t1 - t0)/40.0;
+        for (int i = 0; i < 40; i++) tau += absorb(o + v*(t0 + (float(i) + 0.5)*dt), 0.0)*dt;
+        return tau;
+      }
+      vec3 satHue(float T){
+        vec3 c = bb(T); float m = max(c.r, max(c.g, c.b));
+        if (m <= 0.0) return vec3(1.0, 0.0, 0.0);
+        vec3 n = c/m; float l = dot(n, vec3(0.3, 0.55, 0.15));
+        n = max(vec3(l) + 2.6*(n - vec3(l)), 0.0); return n/max(n.r, max(n.g, n.b));
+      }
+      void main(){
+        vec3 rel = aPos - uShip; float d = max(length(rel), 1e-4);
+        float D; vec3 n2 = aberr(rel/d, D);
+        float cz = dot(n2, uF);
+        float m = aM + 5.0*log(d/10.0)*0.4342945;       // magnitud aparente V
+        float f = exp(-0.9210340*m);                       // 10^(−0,4 m)
+        vec3 cd = bb(aT*D), col;
+        if (aT < 0.0){ float al = -aT - 1.0; col = f*plc(al)*(uBeam > 0.5 ? pow(D, 1.0 + al) : 1.0); }   // ley de potencias: F′_ν = D^(1+α) F_ν, mismo color
+        else {
+          if (uBeam > 0.5){ float g0 = bb(aT).g; col = g0 > 0.0 ? f*cd/(g0*D*D) : vec3(0.0); }   // F′ = B(DT)·Ω/D²
+          else col = cd.g > 0.0 ? f*cd/cd.g : vec3(f, 0.0, 0.0);
+          if (uK > 0.5){ float mm = max(col.r, max(col.g, col.b)); col = satHue(aT*D*D*D)*mm; }
+        }
+        if (uNebOn > 0.5) col *= exp(-tauTo(uShip, aPos)*vec3(0.90, 1.0, 1.18));   // extinción y enrojecimiento (∝ 1/λ)
+        float I = max(col.r, max(col.g, col.b))*uExp;
+        if (cz <= 0.02 || I < 0.004){ gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vCol = vec3(0.0); return; }
+        gl_Position = vec4(dot(n2, uR)/cz/(uTan*uAsp), dot(n2, uU)/cz/uTan, 0.0, 1.0);
+        gl_PointSize = min(uMaxPt, (1.6 + 2.6*log(1.0 + 3.0*I)*0.4342945)*uDpr);
+        float mc = max(col.r, max(col.g, col.b));
+        vCol = pow(col*((1.0 - exp(-mc*uExp))/mc), vec3(1.0/2.2));
+      }`,
+      `precision mediump float; varying vec3 vCol;
+      void main(){ vec2 q = gl_PointCoord*2.0-1.0; float r2 = dot(q,q); if (r2 > 1.0) discard; gl_FragColor = vec4(vCol*exp(-r2*3.2), 1.0); }`);
+    pNeb = program(gl, VS_QUAD, PREC + `
+      uniform vec2 uRes; uniform vec3 uR, uU, uF, uDir, uShip;
+      uniform float uTan, uEta, uAb, uDop, uBeam, uOmega, uGain, uExp, uEye, uRaw, uRawS;
+      ${NEB_GLSL}
+      ${PLC_GLSL}
+      uniform vec4 uLs[8]; uniform float uLT[8];
+      float pk(float l, float Tk){ float x = min(1.4388e7/(l*Tk), 80.0); float s = l/500.0; return 1.0/(s*s*s*s*s*(exp(x) - 1.0)); }
+      // espectro de la luz dispersada: el de la estrella (cuerpo negro) × λ^−1 (granos pequeños), en las unidades de bb(), con V = 1
+      // Doppler: I′_λ(λ) = D⁵ I_λ(λ·D)
+      vec3 refl(float Tk, float D){
+        vec3 l = vec3(610.0, 550.0, 465.0), le = l*D;
+        vec3 sp = vec3(pk(le.x, Tk)*550.0/le.x/pk(l.x, 6500.0), pk(le.y, Tk)*550.0/le.y/pk(l.y, 6500.0), pk(le.z, Tk)*550.0/le.z/pk(l.z, 6500.0));
+        if (uBeam < 0.5) return sp/max(sp.g, 1e-30);                     // sin «intensidad»: solo cambia el color, como en las estrellas
+        return sp/(pk(550.0, Tk)/pk(550.0, 6500.0))*D*D*D*D*D;
+      }
+      float g2(float x){ return exp(-0.5*x*x); }
+      vec3 resp(float l){ return vec3(g2((l - 610.0)/45.0), g2((l - 540.0)/45.0), g2((l - 465.0)/35.0)); }
+      float scot(float l){ return g2((l - 507.0)/45.0); }   // visión en penumbra (bastones): ciega al rojo
+      // tercera línea: He II 469 en las planetarias, He I 588 en el Cangrejo
+      vec3 lines(vec3 e, float D){
+        float l3 = (gOb > 1.5 && gOb < 2.5) ? 587.6 : 468.6;
+        if (uEye > 0.5){ float L = e.x*(scot(656.3/D) + 0.35*scot(486.1/D)) + e.y*1.33*scot(500.7/D) + e.z*scot(l3/D); return L*vec3(0.80, 0.95, 0.92); }
+        return e.x*(resp(656.3/D) + 0.35*resp(486.1/D)) + e.y*1.33*resp(500.7/D) + e.z*resp(l3/D);   // Hα+[N II], Hβ, [O III] 501+496 y He
+      }
+      void main(){
+        vec2 p = (gl_FragCoord.xy - 0.5*uRes)/(0.5*uRes.y);
+        vec3 d = normalize(uR*p.x*uTan + uU*p.y*uTan + uF);                 // dirección observada desde la nave
+        float c = clamp(dot(d, uDir), -1.0, 1.0); vec3 q = d - c*uDir; float s = length(q); q = s > 1e-9 ? q/s : vec3(0.0);
+        float s2 = 0.5*(1.0 - c);
+        float D = uDop > 0.5 ? 1.0/(exp(uEta)*s2 + exp(-uEta)*(1.0 - s2)) : 1.0;
+        vec3 n = d;
+        if (uAb > 0.5){ float t = c >= 0.0 ? s/(1.0 + c) : (1.0 - c)/max(s, 1e-12); float t2 = exp(uEta)*t, qq = 1.0 + t2*t2; n = ((1.0 - t2*t2)/qq)*uDir + (2.0*t2/qq)*q; }
+        // el objeto que corta el rayo (posición local de la nave calculada en doble precisión)
+        float t = 1e30, t1 = 0.0, K = 0.0; vec3 o = vec3(0.0), v = vec3(0.0); gOb = -1.0;
+        for (int i = 0; i < 6; i++){
+          if (uRB[i] <= 0.0) continue;
+          vec3 oi = uOL[i], vi = vec3(dot(n, uNX[i]), dot(n, uNY[i]), dot(n, uNZ[i]));
+          float b = dot(oi, vi), cc = dot(oi, oi) - uRB[i]*uRB[i], disc = b*b - cc;
+          if (disc <= 0.0) continue;
+          float sq = sqrt(disc), ta = max(-b - sq, 0.0), tz = -b + sq;
+          if (tz <= 0.0 || ta >= t) continue;
+          t = ta; t1 = tz; o = oi; v = vi; K = uKo[i]; gOb = float(i);
+        }
+        if (gOb < 0.0){ gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+        if (gOb > 3.5 && gOb < 4.5){
+          // nebulosa de reflexión: dispersión simple de la luz de las 8 estrellas más brillantes (Henyey-Greenstein, g = 0,6; albedo 0,6)
+          float W[8]; for (int j = 0; j < 8; j++) W[j] = 0.0;
+          float Tr = 1.0;
+          // desfase aleatorio del inicio, proporcional al paso local: junto a una estrella el paso es muy corto y un desfase
+          // fijo se saltaría al azar el tramo más iluminado (ruido de puntos)
+          float dt0 = 0.08; vec3 p0 = o + v*t;
+          for (int j = 0; j < 8; j++){ vec3 r = p0 - uLs[j].xyz; dt0 = min(dt0, max(0.2*length(r), 0.00002)); }
+          t += dt0*fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)))*43758.5453);
+          for (int i = 0; i < 700; i++){
+            if (t >= t1 || Tr < 0.003) break;
+            vec3 p = o + v*t;
+            float kap = dustP(p), dt = kap > 0.0 ? 0.02 : 0.08;
+            for (int j = 0; j < 8; j++){ vec3 r = p - uLs[j].xyz; dt = min(dt, max(0.2*length(r), 0.00002)); }
+            dt = min(dt, max(0.5*t, 0.00002));                                  // pasos cortos cerca de la nave
+            if (kap > 0.0){
+              for (int j = 0; j < 8; j++){
+                vec3 r = p - uLs[j].xyz; float r2 = max(dot(r, r), 1e-6), mu = dot(r, -v)/sqrt(r2);
+                float hg = 0.05093/pow(1.36 - 1.2*mu, 1.5);                    // (1 − g²)/(4π (1 + g² − 2gμ)^1,5)
+                W[j] += Tr*0.6*kap*uLs[j].w*100.0/r2*hg*dt;                    // flujo de la estrella: 10^(−0,4 M_V)·(10 pc/r)²
+              }
+            }
+            Tr *= exp(-kap*dt); t += dt;
+          }
+          vec3 col = vec3(0.0);
+          for (int j = 0; j < 8; j++) col += W[j]*refl(uLT[j], D);
+          if (uEye > 0.5) col = vec3(0.80, 0.95, 0.92)*(0.5*col.g + 0.6*col.b);
+          col *= uOmega*uGain;
+          float m = max(col.r, max(col.g, col.b));
+          col = m > 0.0 ? col*((1.0 - exp(-m*uExp))/m) : vec3(0.0);
+          gl_FragColor = vec4(pow(col, vec3(1.0/2.2)), Tr); return;
+        }
+        vec3 E = vec3(0.0); float T = 1.0, Sy = 0.0, SA = 0.0;
+        t += (gOb < 0.5 ? 0.006 : gOb < 1.5 ? 0.008 : 0.005)*fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233)))*43758.5453);
+        for (int i = 0; i < 900; i++){
+          if (t >= t1 || T < 0.003) break;
+          vec4 e; float al, a, dt;
+          nebSample(o + v*t, v, e, al, a, dt);
+          E += T*e.xyz*dt; Sy += T*e.w*dt; SA += T*e.w*al*dt; T *= exp(-a*dt); t += dt;
+        }
+        float alp = Sy > 0.0 ? SA/Sy : 0.7;
+        if (uRaw > 0.5){   // calibración: flujo en V sin escalar
+          float g = (E.x*(resp(656.3).g + 0.35*resp(486.1).g) + E.y*1.33*resp(500.7).g + E.z*resp(gOb > 1.5 && gOb < 2.5 ? 587.6 : 468.6).g + Sy)*uRawS;
+          gl_FragColor = vec4(vec3(g/(1.0 + g)), 1.0); return;
+        }
+        vec3 col = lines(E, D);
+        if (uBeam > 0.5) col *= D*D*D*D;                                   // intensidad integrada de una línea ∝ D⁴
+        // sincrotrón, I_ν ∝ ν^−α: el Doppler no cambia el color, solo el brillo, I′ = D^(3+α) I
+        if (Sy > 0.0) col += Sy*(uEye > 0.5 ? vec3(0.80, 0.95, 0.92)*0.9 : plc(alp))*(uBeam > 0.5 ? pow(D, 3.0 + alp) : 1.0);
+        col *= K*uOmega*uGain;
+        float m = max(col.r, max(col.g, col.b));
+        col = m > 0.0 ? col*((1.0 - exp(-m*uExp))/m) : vec3(0.0);
+        gl_FragColor = vec4(pow(col, vec3(1.0/2.2)), T);
+      }`);
+    pComp = program(gl, VS_QUAD, `precision mediump float; uniform sampler2D uTex; uniform vec2 uRes;
+      void main(){ gl_FragColor = texture2D(uTex, gl_FragCoord.xy/uRes); }`);
+    pLine = program(gl, `
+      attribute vec3 aPos; varying float vOk;
+      ${COMMON}
+      void main(){
+        vec3 rel = aPos - uShip; float d = max(length(rel), 1e-4);
+        float D; vec3 n2 = aberr(rel/d, D); float cz = dot(n2, uF);
+        vOk = cz > 0.05 ? 1.0 : 0.0; float z = max(cz, 0.05);
+        gl_Position = vec4(dot(n2, uR)/z/(uTan*uAsp), dot(n2, uU)/z/uTan, 0.0, 1.0);
+      }`,
+      `precision mediump float; varying float vOk; uniform vec3 uCol;
+      void main(){ if (vOk < 0.999) discard; gl_FragColor = vec4(uCol, 1.0); }`);
+  } catch(err){ noGL(cv, err.message); gl = null; }
+  const NOTE_M42 = 'Ángulo 0° y elevación 0° es el lado que vemos desde la Tierra. ×1 es el brillo superficial real (unas 16 mag/arcsec² en el centro); la fotografía de larga exposición lo realza.';
+  const NOTE_PLE = 'Ángulo 0° y elevación 0° es el lado que vemos desde la Tierra. Unos 1170 miembros de Gaia DR3. La nebulosa es luz de las estrellas dispersada por el polvo, calculada con su brillo real: ×1 es lo que se vería; la fotografía la realza.';
+  const NOTE_HYA = 'Ángulo 0° y elevación 0° es el lado que vemos desde la Tierra. Unos 560 miembros de Gaia DR3 a menos de 15 pc del centro. Aldebarán no pertenece al cúmulo: está a 20 pc, en primer plano.';
+  const NOTE_CRAB = 'Ángulo 0° y elevación 0° es el lado que vemos desde la Tierra. Puedes bajar hasta unas 10 UA del púlsar. El brillo es el intrínseco, sin las ~1,6 magnitudes de extinción interestelar que hay hasta la Tierra.';
+  const NOTE_PN = 'Ángulo 0° y elevación 0° es el lado que vemos desde la Tierra. Puedes bajar hasta unas 10 UA de la enana blanca. ×1 es el brillo superficial real (unas 17 mag/arcsec² en el anillo de M57 y 21 en la Hélice): a simple vista no se distinguirían los colores.';
+  // curva de luz óptica del púlsar del Cangrejo (media = 1): pulso principal y, a 0,4 de fase, el interpulso
+  function psrCurve(ph){
+    const g = (c, s) => { let d = Math.abs(ph - c); d = Math.min(d, 1 - d); return Math.exp(-0.5*(d/s)**2); };
+    return (g(0, 0.018) + 0.45*g(0.40, 0.03) + 0.03)/0.109;
+  }
+  // posición de la nave en el marco local de cada objeto, en doble precisión
+  function setObjs(p, P){
+    const loc = OBJS.flatMap(o => { const r = [0,1,2].map(i => P[i] - o.C[i]); return [o.X, o.Y, o.Z].map(a => a[0]*r[0] + a[1]*r[1] + a[2]*r[2]); });
+    const f = k => OBJS.flatMap(o => o[k]);
+    gl.uniform3fv(U(p, 'uNC'), f('C')); gl.uniform3fv(U(p, 'uNX'), f('X')); gl.uniform3fv(U(p, 'uNY'), f('Y')); gl.uniform3fv(U(p, 'uNZ'), f('Z'));
+    gl.uniform3fv(U(p, 'uOL'), loc);
+    if (U(p, 'uRB') !== undefined) gl.uniform1fv(U(p, 'uRB'), OBJS.map(o => o.RB));
+    if (U(p, 'uKo') !== undefined) gl.uniform1fv(U(p, 'uKo'), OBJS.map(o => o.K));
+    if (U(p, 'uLs') !== undefined){
+      const O = OBJS[4], loc1 = q => { const r = [0,1,2].map(i => q[i] - O.C[i]); return [O.X, O.Y, O.Z].map(a => a[0]*r[0] + a[1]*r[1] + a[2]*r[2]); };
+      const L = [], T = []; let dc = [0, 0, 0];
+      PLE.forEach(nm => { const k = CAT.byName ? CAT.byName[nm] : undefined;
+        if (k === undefined){ L.push(0, 0, 0, 0); T.push(10000); return; }
+        const q = loc1(starPos(k)); L.push(q[0], q[1], q[2], Math.pow(10, -0.4*CAT.data[5*k+3])); T.push(CAT.data[5*k+4]);
+        if (nm === 'Merope') dc = q; });
+      gl.uniform4fv(U(p, 'uLs'), L); gl.uniform1fv(U(p, 'uLT'), T); gl.uniform3fv(p.u.uDc, dc);
+    }
+  }
+  const PLE = ['Alcyone', 'Atlas', 'Electra', 'Maia', 'Merope', 'Taygeta', 'Pleione', 'Celaeno'];
+  // brillo superficial de las planetarias: se traza cada una vista desde el Sol y se ajusta K al valor de catálogo en la zona brillante
+  function calibrate(){
+    const N_ = 128, tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N_, N_, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.viewport(0, 0, N_, N_); gl.disable(gl.BLEND); gl.useProgram(pNeb);
+    const px = new Uint8Array(4*N_*N_);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad); const a = gl.getAttribLocation(pNeb, 'aP'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+    for (const o of OBJS){
+      if (!o.mu) continue;
+      const dd = Math.hypot(...o.C), F = o.C.map(v => v/dd), [R_, U_] = shipBasis(F);
+      setObjs(pNeb, [0, 0, 0]);
+      gl.uniform3fv(pNeb.u.uShip, [0, 0, 0]); gl.uniform3fv(pNeb.u.uDir, F); gl.uniform3fv(pNeb.u.uR, R_); gl.uniform3fv(pNeb.u.uU, U_); gl.uniform3fv(pNeb.u.uF, F);
+      gl.uniform1f(pNeb.u.uEta, 0); gl.uniform1f(pNeb.u.uAb, 0); gl.uniform1f(pNeb.u.uDop, 0); gl.uniform1f(pNeb.u.uTan, 1.05*o.RB/dd);
+      gl.uniform2f(pNeb.u.uRes, N_, N_); gl.uniform1f(pNeb.u.uRaw, 1);
+      let sc = 1, peak = 0;
+      for (let it = 0; it < 6; it++){
+        gl.uniform1f(pNeb.u.uRawS, sc); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, N_, N_, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const v = []; for (let i = 0; i < N_*N_; i++) if (px[4*i+1] > 0) v.push(px[4*i+1]);
+        if (!v.length){ sc *= 1e3; continue; }
+        v.sort((x, y) => x - y); const q = v[Math.floor(0.99*(v.length - 1))]/255;
+        if (q > 0.97){ sc /= 30; continue; }
+        if (q < 0.15){ sc *= Math.min(1e3, 0.5/q); continue; }
+        peak = q/(1 - q)/sc; break;
+      }
+      o.K = peak > 0 ? Math.pow(10, -0.4*(o.mu - 26.57))/peak : 0;
+    }
+    gl.disableVertexAttribArray(a); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fb); gl.deleteTexture(tex);
+  }
+
+  // catálogo sintético de estrellas
+  const N = 7000, R = rng(7);
+  const tanH = new Float64Array(N+1), ch2 = new Float64Array(N+1), th = new Float64Array(N+1),
+        cph = new Float64Array(N+1), sph = new Float64Array(N+1), T = new Float64Array(N+1), F = new Float64Array(N+1);
+  for (let i = 0; i < N; i++){
+    const u = 2*R()-1, ph = 2*Math.PI*R();
+    th[i] = Math.acos(u); cph[i] = Math.cos(ph); sph[i] = Math.sin(ph);
+    const k = R();
+    T[i] = k < .55 ? 3000+1200*R() : k < .85 ? 4200+1800*R() : k < .97 ? 6000+4000*R() : 10000+20000*R();
+    let m = 6.5 + Math.log10(Math.max(R(),1e-9))/0.5; m = Math.max(m, -1.4);
+    F[i] = Math.pow(10, -0.4*m);
+  }
+  th[N] = 0; cph[N] = 1; sph[N] = 0; // estrella de destino, justo delante
+  for (let i = 0; i <= N; i++){ tanH[i] = Math.tan(th[i]/2); const c = Math.cos(th[i]/2); ch2[i] = c*c; }
+  const data = new Float32Array((N+1)*6);
+  // falso color: matiz del cuerpo negro a T·D³, más saturado (el brillo lo pone quien llama)
+  function satHue(Tx){
+    const c = bb(Tx); const m = Math.max(c[0],c[1],c[2]);
+    if (!(m > 0)) return [1,0,0];
+    let n = c.map(v => v/m); const l = .3*n[0]+.55*n[1]+.15*n[2];
+    n = n.map(v => Math.max(l + 2.6*(v - l), 0)); const M = Math.max(...n);
+    return n.map(v => v/M);
+  }
+
+  const DEST = [
+    {n:'Alfa Centauri', d:4.37, M:4.38, T:5790, star:'Rigil Kentaurus'},
+    {n:'Sirio', d:8.6, M:1.42, T:9940, star:'Sirius'},
+    {n:'Vega', d:25.0, M:0.58, T:9600, star:'Vega'},
+    {n:'las Híades', d:150, M:null, star:'Chamukuy', neb:true, ob:5, park:6.0, who:'Chamukuy (θ² Tau)', title:'Híades', rng:[-3, 1.3], r0:0.9, g0:0, clus:true},
+    {n:'las Pléyades', d:442, M:null, star:'Alcyone', neb:true, ob:4, park:4.0, who:'Alcyone', title:'Pléyades', rng:[-3.5, 1.3], r0:0.7, g0:0.6, clus:true},
+    {n:'Betelgeuse', d:548, M:-5.85, T:3600, star:'Betelgeuse'},
+    {n:'la nebulosa de la Hélice', d:655, M:null, star:'Estrella central de la Hélice', neb:true, ob:3, park:1.2, who:'la enana blanca central', title:'Nebulosa de la Hélice', rng:[-4.3, 0.4], r0:0.08, g0:0.3},
+    {n:'la nebulosa de Orión', d:1272, M:null, star:'θ¹ Ori C', neb:true, ob:0, park:2.5, who:'θ¹ Ori C', title:'Nebulosa de Orión', rng:[-1.6, 1], r0:0.4, g0:1.1},
+    {n:'la nebulosa del Anillo', d:2580, M:null, star:'Estrella central de M57', neb:true, ob:1, park:0.6, who:'la enana blanca central', title:'Nebulosa del Anillo (M57)', rng:[-4.3, 0.4], r0:-0.22, g0:0.2},
+    {n:'la nebulosa del Cangrejo', d:6520, M:null, star:'Púlsar del Cangrejo', neb:true, ob:2, park:3.0, who:'el púlsar', title:'Nebulosa del Cangrejo (M1)', rng:[-4.3, 1], r0:0.7, g0:0.0, psr:29.6},
+    {n:'el centro galáctico', d:26700, M:null},
+    {n:'Andrómeda', d:2.54e6, M:null},
+  ];
+  const G_LY = 1.0323; // 1 g en años luz / año²
+  const LY_PC = 3.26156, PARK_PC = 2e-4;   // la nave se detiene a ~41 UA de la estrella de destino
+  // ---------- catálogo real (archivos datos/estrellas.bin y .json) ----------
+  const CAT = {ready:false, failed:false};
+  async function loadCatalog(){
+    try {
+      // el binario va codificado en base64 (el servidor solo sirve tipos de texto e imagen)
+      const [rb, rj] = await Promise.all([fetch('datos/estrellas.b64.txt'), fetch('datos/estrellas.json')]);
+      if (!rb.ok || !rj.ok) throw new Error('HTTP ' + rb.status + '/' + rj.status);
+      const bin = atob((await rb.text()).trim()), bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const data = new Float32Array(bytes.buffer), meta = await rj.json();
+      CAT.n = meta.n; CAT.data = data; CAT.names = meta.nombres;
+      if (meta.neb){ NEB.C = meta.neb.C; NEB.X = meta.neb.X; NEB.Y = meta.neb.Y; NEB.Z = meta.neb.Z.map(v => -v); }   // Z hacia el Sol
+      CAT.byName = {}; meta.nombres.forEach(([k, v]) => { CAT.byName[v] = k; });
+      // nebulosas planetarias: la enana blanca central en doble precisión (a pocas UA el float32 no basta)
+      CAT.exact = {}; CAT.pn = [];
+      (meta.pn || []).forEach(q => { const o = OBJS.find(x => x.id === q.id), k = CAT.byName[q.nombre]; if (!o || k === undefined) return;
+        o.C = q.C; o.X = q.X; o.Y = q.Y; o.Z = q.Z.map(v => -v); CAT.exact[k] = q.C; CAT.pn.push(k); });
+      const L = new Float32Array(meta.lineas.length*6);
+      meta.lineas.forEach(([a, b], i) => { for (let j = 0; j < 3; j++){ L[6*i+j] = data[5*a+j]; L[6*i+3+j] = data[5*b+j]; } });
+      if (gl){
+        const dv = data.slice(); CAT.pn.forEach(k => { dv[5*k+3] = 99; });   // se dibujan aparte
+        CAT.vbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, CAT.vbo); gl.bufferData(gl.ARRAY_BUFFER, dv, gl.STATIC_DRAW);
+        CAT.pbo = gl.createBuffer();
+        CAT.lbo = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, CAT.lbo); gl.bufferData(gl.ARRAY_BUFFER, L, gl.STATIC_DRAW);
+        CAT.nl = meta.lineas.length*2;
+      }
+      CAT.ready = true;
+      // distancias del catálogo en el selector
+      DEST.forEach((d, i) => { if (!d.star || CAT.byName[d.star] === undefined) return; d.dReal = starDist(CAT.byName[d.star])*LY_PC;
+        const o = $('#t-dest').options[i]; if (!d.neb) o.textContent = `${d.n} · ${sci(d.dReal, 3)} años luz (catálogo)`; });
+      $('#v-sky-note').textContent = `${CAT.n.toLocaleString('es-ES')} estrellas, ${CAT.names.length} con nombre, ${meta.lineas.length} segmentos de constelaciones.`;
+      plan();
+    } catch(err){
+      CAT.failed = true;
+      $('#v-sky-note').textContent = 'No se ha podido cargar el catálogo (' + err.message + '); se usa el cielo sintético.';
+    }
+    S.dirty = true;
+  }
+  const starPos = k => CAT.exact && CAT.exact[k] ? CAT.exact[k].slice() : [CAT.data[5*k], CAT.data[5*k+1], CAT.data[5*k+2]];
+  const starDist = k => Math.hypot(...starPos(k));
+  const useReal = () => S.sky === 'real' && CAT.ready && S.trip && S.trip.dest.star && CAT.byName[S.trip.dest.star] !== undefined;
+  // posición (pc, galácticas) y dirección de vuelo de la nave
+  function shipState(){
+    const tr = S.trip, k = CAT.byName[tr.dest.star], p = starPos(k), dd = Math.hypot(...p), u = p.map(v => v/dd);
+    if (tr.dest.neb && S.nb.explore){
+      const a = S.nb.az*Math.PI/180, e = S.nb.el*Math.PI/180, Rr = S.nb.R, l = [Math.cos(e)*Math.sin(a), Math.sin(e), Math.cos(e)*Math.cos(a)];
+      const O = OBJS[tr.dest.ob], off = [0,1,2].map(i => Rr*(l[0]*O.X[i] + l[1]*O.Y[i] + l[2]*O.Z[i]));
+      return {P: p.map((v, i) => v + off[i]), u: off.map(v => -v/Rr), k, dRem: Rr, explore: true};
+    }
+    const x = tr.tau > 0 ? stateAt(tr, tr.tau).x/LY_PC : 0;
+    return {P: u.map(v => v*x), u, k, dRem: Math.max(dd - x, 0)};
+  }
+  // base de la nave: e3 = dirección de vuelo, e2 = hacia el polo norte celeste, e1 = derecha (adelante × arriba)
+  const NCP = (() => { const l = 122.93*Math.PI/180, b = 27.13*Math.PI/180; return [Math.cos(b)*Math.cos(l), Math.cos(b)*Math.sin(l), Math.sin(b)]; })();
+  function shipBasis(u){
+    let up = NCP; if (Math.abs(u[0]*up[0] + u[1]*up[1] + u[2]*up[2]) > 0.995) up = [0,0,1];
+    const c = up[0]*u[0] + up[1]*u[1] + up[2]*u[2];
+    const e2 = norm([up[0]-c*u[0], up[1]-c*u[1], up[2]-c*u[2]]), e1 = cross(u, e2);
+    return [e1, e2, u];
+  }
+  // aberración de una dirección (doble precisión, para los nombres)
+  function aberrJS(n, u, eta){
+    const c = Math.max(-1, Math.min(1, n[0]*u[0] + n[1]*u[1] + n[2]*u[2]));
+    let p = [n[0]-c*u[0], n[1]-c*u[1], n[2]-c*u[2]]; const s = Math.hypot(...p);
+    if (!S.aberr || s < 1e-12) return n;
+    p = p.map(v => v/s);
+    const t = c >= 0 ? s/(1 + c) : (1 - c)/s, t2 = Math.exp(-eta)*t, q = 1 + t2*t2;
+    return [0,1,2].map(i => ((1 - t2*t2)/q)*u[i] + (2*t2/q)*p[i]);
+  }
+
+  function plan(){
+    const dest = DEST[+$('#t-dest').value], a = G_LY*parseFloat($('#t-acc').value), brake = $('#t-mode').value === 'brake';
+    const real = S.sky === 'real' && dest.dReal;
+    $('#t-arr-box').hidden = !real;
+    if (real && S.arrDest !== dest){   // al cambiar de destino, la llegada por defecto de ese destino
+      S.arrDest = dest; const dReal_pc = dest.dReal/LY_PC;
+      $('#t-arr').max = Math.min(1.3, Math.log10(0.9*dReal_pc)).toFixed(2);
+      arrR.set(Math.log10(dest.park || PARK_PC)); S.arr = dest.park || PARK_PC;
+    }
+    const D = real ? dest.dReal - Math.min(S.arr || dest.park || PARK_PC, 0.9*dest.dReal/LY_PC)*LY_PC : dest.d;
+    const ng = $('#v-neb-group'); if (ng) ng.hidden = !(dest.neb && S.sky === 'real');
+    if (dest.neb && S.nbDest !== dest){
+      S.nbDest = dest; $('#v-neb-title').textContent = dest.title; $('#v-neb-r-l').textContent = 'Distancia a ' + dest.who;
+      $('#v-psr-box').hidden = !dest.psr;
+      const noNeb = OBJS[dest.ob].RB <= 0; $('#v-neb-view').hidden = noNeb; $('#v-neb-gain').closest('.ctl').hidden = noNeb;
+      $('#v-neb-note').innerHTML = dest.ob === 0 ? NOTE_M42 : dest.ob === 2 ? NOTE_CRAB : dest.ob === 4 ? NOTE_PLE : dest.ob === 5 ? NOTE_HYA : NOTE_PN;
+      const el = $('#v-neb-r'); el.min = dest.rng[0]; el.max = dest.rng[1]; rR.set(dest.r0); S.nb.R = Math.pow(10, dest.r0);
+      const g = S.nb.eye ? 0 : dest.g0; gainR.set(g); S.nb.gain = Math.pow(10, g);
+    }
+    let tauT, tT, etaMax;
+    if (brake){ const th_ = Math.acosh(1 + a*D/2)/a; tauT = 2*th_; tT = 2*Math.sinh(a*th_)/a; etaMax = a*th_; }
+    else { tauT = Math.acosh(1 + a*D)/a; tT = Math.sinh(a*tauT)/a; etaMax = a*tauT; }
+    const old = S.trip;
+    S.trip = {dest, a, brake, D, tauT, tT, etaMax, tau:0, playing:false, started:false};
+    if (old && old.started) { /* reinicia */ }
+    $('#t-go').textContent = 'Iniciar viaje';
+    updTrip(); S.dirty = true;
+  }
+  function stateAt(tr, tau){
+    const a = tr.a;
+    if (!tr.brake || tau <= tr.tauT/2){
+      const e = a*tau; return {eta:e, x:(Math.cosh(e)-1)/a, t:Math.sinh(e)/a};
+    }
+    const t2 = tr.tauT - tau, e = a*t2;
+    return {eta:e, x:tr.D - (Math.cosh(e)-1)/a, t:tr.tT - Math.sinh(e)/a};
+  }
+  function updTrip(){
+    const tr = S.trip; if (!tr) return;
+    const st = stateAt(tr, tr.tau);
+    const rows = [
+      ['Tiempo a bordo', fmtYears(tr.tau)+' de '+fmtYears(tr.tauT)],
+      ['Tiempo en la Tierra', fmtYears(st.t)+' de '+fmtYears(tr.tT)],
+      ['Distancia recorrida', sci(st.x)+' a.l. de '+sci(tr.D)],
+      ['γ máximo', fmtGamma(Math.cosh(tr.etaMax))],
+    ];
+    $('#t-out').innerHTML = rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+    $('#trip-title').textContent = `Viaje a ${tr.dest.n}: ${fmtYears(tr.tauT)} a bordo, ${fmtYears(tr.tT)} en la Tierra`;
+    $('#trip-bar').style.width = (100*tr.tau/tr.tauT).toFixed(2)+'%';
+    drawChart(st);
+  }
+  function drawChart(st){
+    const c = $('#trip-chart'); fitCanvas(c); const x = c.getContext('2d'); const W = c.width, H = c.height, k = DPR();
+    x.clearRect(0,0,W,H);
+    const tr = S.trip; if (!tr) return;
+    const L = 46*k, B = 26*k, Rm = 10*k, Tm = 8*k, w = W-L-Rm, h = H-B-Tm;
+    const X = t => L + w*t/tr.tT, Y = tau => Tm + h*(1 - tau/tr.tauT);
+    x.strokeStyle = '#1c2436'; x.lineWidth = 1;
+    x.font = `${11*k}px IBM Plex Mono, monospace`; x.fillStyle = '#8c95aa';
+    for (let i = 0; i <= 4; i++){
+      const yy = Tm + h*i/4; x.beginPath(); x.moveTo(L,yy); x.lineTo(L+w,yy); x.stroke();
+      x.textAlign = 'right'; x.fillText(sci(tr.tauT*(1-i/4),2), L-6*k, yy+4*k);
+      const xx = L + w*i/4; x.textAlign = i === 4 ? 'right' : i === 0 ? 'left' : 'center'; x.fillText(sci(tr.tT*i/4,2), xx, H-8*k);
+    }
+    // referencia sin dilatación: τ = t (si cabe en la escala)
+    x.setLineDash([4*k,4*k]); x.strokeStyle = '#3a4560'; x.beginPath();
+    x.moveTo(X(0),Y(0)); const tm = Math.min(tr.tT, tr.tauT); x.lineTo(X(tm), Y(tm)); x.stroke(); x.setLineDash([]);
+    x.strokeStyle = '#7cc4ff'; x.lineWidth = 2*k; x.beginPath();
+    for (let i = 0; i <= 200; i++){ const tau = tr.tauT*i/200; const s = stateAt(tr, tau); const px = X(s.t), py = Y(tau); i ? x.lineTo(px,py) : x.moveTo(px,py); }
+    x.stroke();
+    x.fillStyle = '#f0a35e'; x.beginPath(); x.arc(X(st.t), Y(tr.tau), 4.5*k, 0, 7); x.fill();
+    x.fillStyle = '#8c95aa'; x.textAlign = 'left';
+    x.fillText('años a bordo ↑', L+6*k, Tm+12*k);
+    x.textAlign = 'right'; x.fillText('años en la Tierra →', L+w, Tm+h-6*k);
+  }
+
+  function render(){
+    if (!gl) return;
+    fitCanvas(cv);
+    const W = cv.width, H = cv.height, asp = W/H, tn = Math.tan(S.fov*Math.PI/360);
+    gl.viewport(0,0,W,H);
+    const [Rv,Uv,Fv] = rotBasis([1,0,0],[0,1,0],[0,0,1], S.yaw, S.pitch);
+    const eta = S.eta;
+    // fondo de microondas
+    gl.disable(gl.BLEND); gl.useProgram(pCmb);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    const la = gl.getAttribLocation(pCmb, 'aP'); gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(pCmb.u.uRes, W, H); gl.uniform3fv(pCmb.u.uR, Rv); gl.uniform3fv(pCmb.u.uU, Uv); gl.uniform3fv(pCmb.u.uF, Fv);
+    gl.uniform3fv(pCmb.u.uRef, REF); gl.uniform1f(pCmb.u.uTan, tn); gl.uniform1f(pCmb.u.uEta, S.aberr ? eta : 0);
+    gl.uniform1f(pCmb.u.uOn, (S.cmb && S.dopp) ? 1 : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disableVertexAttribArray(la);
+    const lab = $('#cv-viaje-lab'); fitCanvas(lab); const lx = lab.getContext('2d'); lx.clearRect(0, 0, lab.width, lab.height);
+    const em = Math.exp(-eta), eP = Math.exp(eta), k = DPR();
+    if (useReal()){ renderReal(W, H, asp, tn, Rv, Uv, Fv, eta, lx); return; }
+    // estrellas
+    let n = 0;
+    const tr = S.trip;
+    let destF = 0;
+    if (tr && tr.dest.M !== null){
+      const st = stateAt(tr, tr.tau); const dl = Math.max(tr.D - st.x, 2e-4);
+      const mApp = tr.dest.M + 5*Math.log10(dl/3.2616) - 5; destF = Math.pow(10, -0.4*mApp); T[N] = tr.dest.T;
+    }
+    for (let i = 0; i <= N; i++){
+      let f = F[i];
+      if (i === N){ if (!destF) continue; f = destF; }
+      const tp = S.aberr ? 2*Math.atan(em*tanH[i]) : th[i];
+      const D = S.dopp ? (eP*ch2[i] + em*(1-ch2[i])) : 1;
+      const st_ = Math.sin(tp), dx = st_*cph[i], dy = st_*sph[i], dz = Math.cos(tp);
+      const cz = dx*Fv[0]+dy*Fv[1]+dz*Fv[2]; if (cz <= 0.02) continue;
+      const cx = dx*Rv[0]+dy*Rv[1]+dz*Rv[2], cy = dx*Uv[0]+dy*Uv[1]+dz*Uv[2];
+      const sx = cx/cz/(tn*asp), sy = cy/cz/tn;
+      if (sx < -1.05 || sx > 1.05 || sy < -1.05 || sy > 1.05) continue;
+      let c = bb(T[i]*D);
+      let sc = f;
+      if (S.beam) sc /= D*D;
+      else {
+        // brillo como en reposo: solo cambia el color
+        const c0 = bb(T[i]); const l0 = .3*c0[0]+.55*c0[1]+.15*c0[2], l1 = .3*c[0]+.55*c[1]+.15*c[2];
+        if (l1 > 0) sc *= l0/l1; else c = [l0/0.3, 0, 0];
+      }
+      let r = c[0]*sc, g = c[1]*sc, b = c[2]*sc;
+      if (S.kcol){ const m = Math.max(r,g,b); const h = satHue(T[i]*D*D*D); r = h[0]*m; g = h[1]*m; b = h[2]*m; }
+      const I = Math.max(r,g,b)*S.exp;
+      if (I < 0.004) continue;
+      const size = Math.min(maxPt, (1.6 + 2.6*Math.log10(1 + I*3))*k*(i===N?1.6:1));
+      const o = n*6;
+      data[o] = sx; data[o+1] = sy; data[o+2] = size;
+      const tc = toneRGB(r, g, b, S.exp); data[o+3] = tc[0]; data[o+4] = tc[1]; data[o+5] = tc[2];
+      n++;
+    }
+    if (n){
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+      gl.useProgram(pPt); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, n*6), gl.DYNAMIC_DRAW);
+      const aP = gl.getAttribLocation(pPt,'aPos'), aS = gl.getAttribLocation(pPt,'aSize'), aC = gl.getAttribLocation(pPt,'aCol');
+      gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 2, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(aS); gl.vertexAttribPointer(aS, 1, gl.FLOAT, false, 24, 8);
+      gl.enableVertexAttribArray(aC); gl.vertexAttribPointer(aC, 3, gl.FLOAT, false, 24, 12);
+      gl.drawArrays(gl.POINTS, 0, n);
+      gl.disableVertexAttribArray(aP); gl.disableVertexAttribArray(aS); gl.disableVertexAttribArray(aC);
+    }
+    hud(eta, '');
+  }
+  function renderReal(W, H, asp, tn, Rs, Us, Fs, eta, lx){
+    const sh = shipState(), [e1, e2, e3] = shipBasis(sh.u);
+    const toG = v => [0,1,2].map(i => v[0]*e1[i] + v[1]*e2[i] + v[2]*e3[i]);   // de la base de la nave a galácticas
+    const Rg = toG(Rs), Ug = toG(Us), Fg = toG(Fs), k = DPR();
+    const setCommon = p => {
+      gl.uniform3fv(p.u.uShip, sh.P); gl.uniform3fv(p.u.uDir, sh.u); gl.uniform3fv(p.u.uR, Rg); gl.uniform3fv(p.u.uU, Ug); gl.uniform3fv(p.u.uF, Fg);
+      gl.uniform3fv(p.u.uRef, REF); gl.uniform1f(p.u.uEta, eta); gl.uniform1f(p.u.uTan, tn); gl.uniform1f(p.u.uAsp, asp);
+      gl.uniform1f(p.u.uAb, S.aberr ? 1 : 0); gl.uniform1f(p.u.uDop, S.dopp ? 1 : 0);
+    };
+    const setNeb = p => setObjs(p, sh.P);
+    // volumen de la nebulosa a media resolución, compuesto encima del fondo: color + fondo·transmisión
+    {
+      const w = Math.max(2, Math.round(W*0.5)), h = Math.max(2, Math.round(H*0.5));
+      if (!fbo || fboW !== w || fboH !== h){
+        if (fbo){ gl.deleteFramebuffer(fbo); gl.deleteTexture(fboTex); }
+        fboTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, fboTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+        fboW = w; fboH = h;
+      }
+      // el volumen solo se vuelve a trazar si cambia algo que le afecte (los destellos del púlsar no)
+      const key = JSON.stringify([sh.P, sh.u, Rg, Ug, Fg, eta, tn, w, h, S.beam, S.aberr, S.dopp, S.nb.gain, S.exp, S.nb.eye, fboTex ? 1 : 0]);
+      if (key !== S.nebKey || S.nebFbo !== fbo){
+      S.nebKey = key; S.nebFbo = fbo;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, w, h); gl.disable(gl.BLEND);
+      gl.useProgram(pNeb); setCommon(pNeb); setNeb(pNeb);
+      gl.uniform2f(pNeb.u.uRes, w, h); gl.uniform1f(pNeb.u.uBeam, S.beam ? 1 : 0); gl.uniform1f(pNeb.u.uRaw, 0);
+      gl.uniform1f(pNeb.u.uOmega, Math.pow(2*Math.tan(35*Math.PI/180)/H, 2));   // brillo superficial: no depende del zoom
+      gl.uniform1f(pNeb.u.uGain, S.nb.gain); gl.uniform1f(pNeb.u.uExp, S.exp); gl.uniform1f(pNeb.u.uEye, S.nb.eye ? 1 : 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad); let a = gl.getAttribLocation(pNeb, 'aP'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); gl.disableVertexAttribArray(a);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      }
+      gl.viewport(0, 0, W, H);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.SRC_ALPHA);
+      let a;
+      gl.useProgram(pComp); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fboTex);
+      gl.uniform1i(pComp.u.uTex, 0); gl.uniform2f(pComp.u.uRes, W, H);
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad); a = gl.getAttribLocation(pComp, 'aP'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); gl.disableVertexAttribArray(a);
+    }
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    if (S.cons && Math.hypot(...sh.P) < 30){   // las figuras solo tienen sentido cerca del Sol
+      gl.useProgram(pLine); setCommon(pLine); gl.uniform3fv(pLine.u.uCol, [0.11, 0.17, 0.28]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, CAT.lbo); const a = gl.getAttribLocation(pLine, 'aPos');
+      gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 3, gl.FLOAT, false, 12, 0);
+      gl.lineWidth(1); gl.drawArrays(gl.LINES, 0, CAT.nl); gl.disableVertexAttribArray(a);
+    }
+    gl.useProgram(pReal); setCommon(pReal);
+    gl.uniform1f(pReal.u.uExp, S.exp); gl.uniform1f(pReal.u.uDpr, k); gl.uniform1f(pReal.u.uMaxPt, maxPt);
+    gl.uniform1f(pReal.u.uBeam, S.beam ? 1 : 0); gl.uniform1f(pReal.u.uK, S.kcol ? 1 : 0); gl.uniform1f(pReal.u.uNebOn, 1); setNeb(pReal);
+    gl.bindBuffer(gl.ARRAY_BUFFER, CAT.vbo);
+    const aP = gl.getAttribLocation(pReal, 'aPos'), aM = gl.getAttribLocation(pReal, 'aM'), aT = gl.getAttribLocation(pReal, 'aT');
+    gl.enableVertexAttribArray(aP); gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 20, 0);
+    gl.enableVertexAttribArray(aM); gl.vertexAttribPointer(aM, 1, gl.FLOAT, false, 20, 12);
+    gl.enableVertexAttribArray(aT); gl.vertexAttribPointer(aT, 1, gl.FLOAT, false, 20, 16);
+    gl.drawArrays(gl.POINTS, 0, CAT.n);
+    // las enanas blancas centrales, con su posición relativa en doble precisión
+    if (CAT.pn.length){
+      const pd = new Float32Array(5*CAT.pn.length);
+      CAT.pn.forEach((kk, j) => { const p = starPos(kk); for (let i = 0; i < 3; i++) pd[5*j+i] = p[i] - sh.P[i]; pd[5*j+3] = CAT.data[5*kk+3]; pd[5*j+4] = CAT.data[5*kk+4];
+        if (S.ps.on && kk === CAT.byName['Púlsar del Cangrejo']) pd[5*j+3] -= 2.5*Math.log10(Math.max(psrCurve(S.ps.ph), 1e-4)); });
+      gl.uniform3fv(pReal.u.uShip, [0, 0, 0]); gl.uniform1f(pReal.u.uNebOn, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, CAT.pbo); gl.bufferData(gl.ARRAY_BUFFER, pd, gl.DYNAMIC_DRAW);
+      gl.vertexAttribPointer(aP, 3, gl.FLOAT, false, 20, 0); gl.vertexAttribPointer(aM, 1, gl.FLOAT, false, 20, 12); gl.vertexAttribPointer(aT, 1, gl.FLOAT, false, 20, 16);
+      gl.drawArrays(gl.POINTS, 0, CAT.pn.length);
+    }
+    gl.disableVertexAttribArray(aP); gl.disableVertexAttribArray(aM); gl.disableVertexAttribArray(aT);
+    // nombres de las estrellas que se ven brillantes desde la nave
+    const mApp = kk => { const p = starPos(kk), d = Math.max(Math.hypot(p[0]-sh.P[0], p[1]-sh.P[1], p[2]-sh.P[2]), 1e-5); return CAT.data[5*kk+3] + 5*Math.log10(d/10); };
+    if (S.names){
+      lx.font = `${11*k}px IBM Plex Sans, sans-serif`; lx.textBaseline = 'middle';
+      for (const [kk, name] of CAT.names){
+        const isDest = kk === sh.k, isSun = kk === 0;
+        const m = mApp(kk);
+        if (!(isDest || m < 1.6 || (isSun && m < 6.5))) continue;
+        const p = starPos(kk), r = [p[0]-sh.P[0], p[1]-sh.P[1], p[2]-sh.P[2]], d = Math.hypot(...r);
+        if (d < 1e-6) continue;
+        const n2 = aberrJS(r.map(v => v/d), sh.u, eta);
+        const cz = n2[0]*Fg[0] + n2[1]*Fg[1] + n2[2]*Fg[2]; if (cz < 0.05) continue;
+        const sx = (n2[0]*Rg[0] + n2[1]*Rg[1] + n2[2]*Rg[2])/cz/(tn*asp), sy = (n2[0]*Ug[0] + n2[1]*Ug[1] + n2[2]*Ug[2])/cz/tn;
+        if (Math.abs(sx) > 1 || Math.abs(sy) > 1) continue;
+        const X = (sx + 1)/2*W, Y = (1 - sy)/2*H;
+        lx.fillStyle = isDest ? 'rgba(240,163,94,.95)' : isSun ? 'rgba(255,230,160,.9)' : 'rgba(200,214,238,.72)';
+        lx.fillText(isSun ? 'Sol' : name, X + 7*k, Y - 7*k);
+      }
+    }
+    const au = sh.dRem*206265, dist = au < 2000 ? `${Math.round(au)} UA` : sh.dRem < 30 ? `${fx(sh.dRem, 2)} pc` : `${sci(sh.dRem*LY_PC)} a.l.`;
+    const who = S.trip.dest.neb ? S.trip.dest.who : S.trip.dest.star === 'Rigil Kentaurus' ? 'Alfa Centauri A' : S.trip.dest.n;
+    const extra = (sh.explore ? 'Explorando ' + S.trip.dest.n : 'Cielo real') + ` · a ${dist} ${who.startsWith('el ') ? 'del ' + who.slice(3) : 'de ' + who} · su magnitud: ${fx(mApp(sh.k), 1)}` + (sh.P.some(v => v !== 0) ? ` · la del Sol: ${fx(mApp(0), 1)}` : '');
+    let px = '';
+    if (S.trip.dest.psr){
+      const p = starPos(sh.k), r = p.map((v, i) => v - sh.P[i]), d = Math.hypot(...r), c = (r[0]*sh.u[0] + r[1]*sh.u[1] + r[2]*sh.u[2])/d, ch = 0.5*(1 + c);
+      const Dp = S.dopp ? Math.exp(eta)*ch + Math.exp(-eta)*(1 - ch) : 1;
+      S.ps.f = S.trip.dest.psr*Dp;
+      px = `<br>Pulsos del púlsar: ${sci(S.ps.f, 3)} por segundo (en su propio reloj, ${fx(S.trip.dest.psr, 1)})`;
+      if (S.ps.on){ const T_ = S.ps.slow/S.ps.f; px += `<br>A cámara lenta: un destello principal cada ${T_ < 1 ? fx(T_*1000, 0) + ' ms' : sci(T_, 3) + ' s'}`; }
+    }
+    hud(eta, extra + px);
+  }
+  function hud(eta, extra){
+    const em = Math.exp(-eta), eP = Math.exp(eta);
+    // HUD y lecturas
+    const gam = Math.cosh(eta), half = 2*Math.atan(em)*180/Math.PI;
+    $('#hud-viaje').innerHTML = (extra ? extra + '<br>' : '') + `${fmtBeta(eta)} · γ = ${fmtGamma(gam)}<br>Doppler: delante ×${sci(eP)}, detrás ×${sci(em)}<br>Medio cielo delantero cabe en ±${half < 10 ? sci(half,3) : fx(half,1)}°` + (eP*2.7255 > 700 && S.cmb ? `<br>Fondo de microondas al frente: ${sci(eP*2.7255)} K` : '') + (half < S.fov/8 && S.aberr ? `<br>Reduce el campo de visión para ver el cono delantero` : '');
+    $('#v-beta').textContent = fmtBeta(eta);
+    $('#v-gamma').textContent = fmtGamma(gam);
+  }
+
+  // controles
+  const sp = range('v-speed', v => { S.eta = 15*Math.pow(v/1000, 2); if (S.trip) S.trip.playing = false, $('#t-go').textContent = 'Continuar'; S.dirty = true; }, v => 'η = '+fx(15*Math.pow(v/1000,2), 2));
+  S.eta = 15*Math.pow(316/1000,2);
+  const setEta = e => { S.eta = e; sp.set(1000*Math.sqrt(Math.min(e,15)/15)); };
+  range('v-exp', v => { S.exp = Math.pow(10, v); S.dirty = true; }, v => '×'+sci(Math.pow(10,v),2));
+  range('v-fov', v => { S.fov = Math.pow(10, v); S.dirty = true; }, v => { const f = Math.pow(10, v); return (f < 10 ? sci(f, 2) : Math.round(f)) + '°'; });
+  check('v-aberr', v => { S.aberr = v; S.dirty = true; });
+  check('v-dopp', v => { S.dopp = v; S.dirty = true; });
+  check('v-beam', v => { S.beam = v; S.dirty = true; });
+  check('v-cmb', v => { S.cmb = v; S.dirty = true; });
+  check('v-kcol', v => { S.kcol = v; S.dirty = true; });
+  check('v-cons', v => { S.cons = v; S.dirty = true; });
+  check('v-names', v => { S.names = v; S.dirty = true; });
+  seg('v-sky', v => { S.sky = v; plan(); S.dirty = true; });
+  const gainR = range('v-neb-gain', v => { S.nb.gain = Math.pow(10, v); S.dirty = true; }, v => '×' + sci(Math.pow(10, v), 2));
+  seg('v-neb-view', v => { S.nb.eye = v === 'ojo'; const g = S.nb.eye ? 0 : (S.nbDest ? S.nbDest.g0 : 1.1); S.nb.gain = Math.pow(10, g); gainR.set(g); S.dirty = true; });
+  check('v-neb-exp', v => { S.nb.explore = v; if (v){ if (S.trip) S.trip.playing = false; $('#t-go').textContent = 'Continuar'; setEta(0); S.yaw = 0; S.pitch = 0; } S.dirty = true; });
+  range('v-neb-az', v => { S.nb.az = v; S.dirty = true; }, v => v + '°');
+  range('v-neb-el', v => { S.nb.el = v; S.dirty = true; }, v => v + '°');
+  check('v-psr-on', v => { S.ps.on = v; S.dirty = true; });
+  range('v-psr-slow', v => { S.ps.slow = Math.pow(10, v); S.dirty = true; }, v => '×1/' + sci(Math.pow(10, v), 2).replace(/^1·10/, '10'));
+  const rR = range('v-neb-r', v => { S.nb.R = Math.pow(10, v); S.dirty = true; }, v => { const r = Math.pow(10, v), au = r*206265; return au < 2000 ? (au < 100 ? fx(au, 1) : Math.round(au)) + ' UA' : fx(r, r < 0.1 ? 3 : 2) + ' pc'; });
+  $$('[data-look]').forEach(b => b.addEventListener('click', () => { S.yaw = +b.dataset.look*Math.PI/180; S.pitch = 0; S.dirty = true; }));
+  drag(cv, (dx, dy) => { const k = S.fov*Math.PI/180/cv.clientHeight; S.yaw -= dx*k; S.pitch = Math.max(-1.5, Math.min(1.5, S.pitch + dy*k)); S.dirty = true; });
+  ['t-dest','t-acc','t-mode'].forEach(id => $('#'+id).addEventListener('change', plan));
+  const arrR = range('t-arr', v => { S.arr = Math.pow(10, v); plan(); }, v => { const r = Math.pow(10, v), au = r*206265; return au < 2000 ? (au < 100 ? fx(au, 1) : Math.round(au)) + ' UA' : fx(r, r < 0.1 ? 3 : 2) + ' pc'; });
+  $('#t-go').addEventListener('click', () => {
+    const tr = S.trip; if (!tr) return;
+    if (tr.tau >= tr.tauT) tr.tau = 0;
+    tr.playing = !tr.playing; tr.started = true;
+    $('#t-go').textContent = tr.playing ? 'Pausar' : 'Continuar';
+  });
+  $('#t-reset').addEventListener('click', () => { plan(); setEta(0); S.yaw = 0; S.pitch = 0; S.dirty = true; });
+  if (gl){ try { calibrate(); } catch(err){ console.warn('calibración', err); } }
+  plan();
+  loadCatalog();
+
+  return {
+    frame(dt){
+      const tr = S.trip;
+      if (tr && tr.playing){
+        tr.tau = Math.min(tr.tauT, tr.tau + tr.tauT*dt/24);
+        setEta(stateAt(tr, tr.tau).eta);
+        if (tr.tau >= tr.tauT){ tr.playing = false; $('#t-go').textContent = 'Repetir viaje'; }
+        updTrip(); S.dirty = true;
+      }
+      if (S.ps.on && tr && tr.dest.psr && useReal() && S.ps.f > 0){ S.ps.ph = (S.ps.ph + S.ps.f*dt/S.ps.slow) % 1; S.dirty = true; }
+      if (S.dirty){ S.dirty = false; render(); }
+    },
+    resize(){ S.dirty = true; updTrip(); }
+  };
+})();
+
+/* =====================================================================
+   2. OBJETOS VELOCES (Terrell–Penrose)
+   ===================================================================== */
+const Objetos = (() => {
+  const cv = $('#cv-obj'), ctx = cv.getContext('2d');
+  const S = {beta:0.9, p:0.35, play:false, shape:'cubo', vis:true, meas:true, gal:false, dopp:true, map:true, dirty:true};
+  const SUB = 28, Y0 = -0.75;
+
+  function box(cx, sx, sy, sz){
+    const v = []; for (const a of [-1,1]) for (const b of [-1,1]) for (const c of [-1,1]) v.push([cx+a*sx/2, b*sy/2, c*sz/2]);
+    const E = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+    const Fc = [[0,1,3,2],[4,5,7,6],[0,1,5,4],[2,3,7,6],[0,2,6,4],[1,3,7,5]];
+    return {lines: E.map(([a,b]) => sub(v[a], v[b])), faces: Fc.map(f => [].concat(...f.map((a,i) => sub(v[a], v[f[(i+1)%4]]).slice(0,-1))))};
+  }
+  function sub(a, b){ const o = []; for (let i = 0; i <= SUB; i++){ const t = i/SUB; o.push([a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]); } return o; }
+  function geom(shape){
+    if (shape === 'cubo') return Object.assign(box(0,1,1,1), {d:2.4});
+    if (shape === 'tren'){ const g = {lines:[], faces:[], d:3.6}; for (const c of [-1.75,0,1.75]){ const b = box(c,1.55,0.75,0.75); g.lines.push(...b.lines); g.faces.push(...b.faces);} return g; }
+    if (shape === 'esfera'){
+      const L = [], r = 0.5;
+      for (let la = -60; la <= 60; la += 30){ const q = la*Math.PI/180, o = []; for (let i = 0; i <= 64; i++){ const p = 2*Math.PI*i/64; o.push([r*Math.cos(q)*Math.cos(p), r*Math.sin(q), r*Math.cos(q)*Math.sin(p)]); } L.push(o); }
+      for (let lo = 0; lo < 180; lo += 22.5){ const p = lo*Math.PI/180, o = []; for (let i = 0; i <= 64; i++){ const q = 2*Math.PI*i/64; o.push([r*Math.cos(q)*Math.cos(p), r*Math.sin(q), r*Math.cos(q)*Math.sin(p)]); } L.push(o); }
+      return {lines:L, faces:[], d:2.2};
+    }
+    // regla: plano x-y con marcas
+    const L = [];
+    for (let i = -8; i <= 8; i++){ const x = i*0.25, h = i % 4 === 0 ? 0.5 : i % 2 === 0 ? 0.32 : 0.2; L.push(sub([x,-0.5,0],[x,-0.5+h,0])); }
+    L.push(sub([-2,-0.5,0],[2,-0.5,0])); L.push(sub([-2,0.5,0],[2,0.5,0])); L.push(sub([-2,-0.5,0],[-2,0.5,0])); L.push(sub([2,-0.5,0],[2,0.5,0]));
+    const face = [].concat(sub([-2,-0.5,0],[2,-0.5,0]).slice(0,-1), sub([2,-0.5,0],[2,0.5,0]).slice(0,-1), sub([2,0.5,0],[-2,0.5,0]).slice(0,-1), sub([-2,0.5,0],[-2,-0.5,0]).slice(0,-1));
+    return {lines:L, faces:[face], d:3.2};
+  }
+  let G = geom(S.shape);
+
+  function render(){
+    fitCanvas(cv);
+    const W = cv.width, H = cv.height, k = DPR();
+    const b = S.beta, g = 1/Math.sqrt(1-b*b), d = G.d;
+    const t = S.p*3.5/Math.max(b, 0.05);
+    const f = (W/2)/Math.tan(52*Math.PI/180), cx = W/2, cy = H*0.40;
+    const proj = P => [cx + f*P[0]/P[2], cy - f*P[1]/P[2]];
+    const ret = p => { // posición de emisión vista en t
+      const X0 = p[0]/g, rho2 = (p[1]+Y0)**2 + (p[2]+d)**2, A = t + X0*b, B = 1-b*b, C = t*t - X0*X0 - rho2;
+      const u = (A - Math.sqrt(Math.max(A*A - B*C, 0)))/B;
+      return [X0 + b*u, p[1]+Y0, p[2]+d, u];
+    };
+    const tc = ret([0,0,0])[3];
+    const meas = (p, tt) => [p[0]/g + b*tt, p[1]+Y0, p[2]+d];
+    const gal = (p, tt) => [p[0] + b*tt, p[1]+Y0, p[2]+d];
+    const Dop = P => 1/(g*(1 + b*P[0]/Math.hypot(P[0],P[1],P[2])));
+    const col = (D, a) => { if (!S.dopp) return `rgba(222,230,243,${a})`; const c = hueOf(5800*D); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; };
+
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0,0,W,H);
+    // suelo de referencia
+    ctx.strokeStyle = 'rgba(140,165,210,.42)'; ctx.lineWidth = 1.3*k;
+    const yg = -1.5;
+    for (let z = 1; z <= 14; z++){ const a = proj([-12,yg,z]), c = proj([12,yg,z]); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); }
+    for (let x = -12; x <= 12; x++){ const a = proj([x,yg,0.6]), c = proj([x,yg,14]); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); }
+
+    const strokeShape = (fn, style, dash, wid) => {
+      ctx.setLineDash(dash); ctx.strokeStyle = style; ctx.lineWidth = wid;
+      for (const L of G.lines){ ctx.beginPath(); L.forEach((p,i) => { const q = proj(fn(p)); i ? ctx.lineTo(q[0],q[1]) : ctx.moveTo(q[0],q[1]); }); ctx.stroke(); }
+      ctx.setLineDash([]);
+    };
+    if (S.gal) strokeShape(p => gal(p, tc), 'rgba(160,170,190,.55)', [2*k,4*k], 1.2*k);
+    if (S.meas) strokeShape(p => meas(p, tc), 'rgba(124,196,255,.85)', [6*k,5*k], 1.4*k);
+
+    if (S.vis){
+      // caras translúcidas, de lejos a cerca
+      const faces = G.faces.map(F => { const P = F.map(ret); const m = P.reduce((s,q) => s + Math.hypot(q[0],q[1],q[2]), 0)/P.length; const Dm = P.reduce((s,q) => s + Dop(q), 0)/P.length; return {P, m, Dm}; }).sort((a,c) => c.m - a.m);
+      for (const fc of faces){ ctx.beginPath(); fc.P.forEach((q,i) => { const s = proj(q); i ? ctx.lineTo(s[0],s[1]) : ctx.moveTo(s[0],s[1]); }); ctx.closePath(); ctx.fillStyle = col(fc.Dm, 0.2); ctx.fill(); }
+      ctx.lineWidth = 1.8*k; ctx.lineCap = 'round';
+      for (const L of G.lines){
+        const P = L.map(ret), Sx = P.map(proj);
+        for (let i = 0; i < P.length-1; i++){
+          ctx.strokeStyle = col(Dop(P[i]), 0.95);
+          ctx.beginPath(); ctx.moveTo(Sx[i][0],Sx[i][1]); ctx.lineTo(Sx[i+1][0],Sx[i+1][1]); ctx.stroke();
+        }
+      }
+    }
+
+    // mapa cenital
+    if (S.map){
+      const mw = Math.min(W*0.36, 300*k), mh = mw*0.62, mx = W - mw - 10*k, my = H - mh - 10*k;
+      ctx.fillStyle = 'rgba(8,11,19,.86)'; ctx.strokeStyle = '#1c2436'; ctx.lineWidth = 1*k;
+      ctx.fillRect(mx,my,mw,mh); ctx.strokeRect(mx,my,mw,mh);
+      const sc = mw/14, ox = mx + mw/2, oz = my + mh - 14*k;
+      const M = (x,z) => [ox + x*sc, oz - z*sc];
+      ctx.save(); ctx.beginPath(); ctx.rect(mx,my,mw,mh); ctx.clip();
+      ctx.strokeStyle = 'rgba(140,149,170,.35)'; ctx.setLineDash([3*k,3*k]); ctx.beginPath(); let a = M(-8,d), c = M(8,d); ctx.moveTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); ctx.setLineDash([]);
+      const top = (fn, style) => { ctx.strokeStyle = style; ctx.lineWidth = 1.3*k; for (const L of G.lines){ ctx.beginPath(); L.forEach((p,i) => { const q = fn(p); const s = M(q[0], q[2]); i ? ctx.lineTo(s[0],s[1]) : ctx.moveTo(s[0],s[1]); }); ctx.stroke(); } };
+      top(p => meas(p, t), 'rgba(124,196,255,.9)');
+      top(ret, 'rgba(240,163,94,.95)');
+      // rayos de luz desde los extremos de la imagen
+      let lo = null, hi = null;
+      for (const L of G.lines) for (const p of L){ const q = ret(p); if (!lo || q[0] < lo[0]) lo = q; if (!hi || q[0] > hi[0]) hi = q; }
+      ctx.strokeStyle = 'rgba(240,163,94,.45)'; ctx.setLineDash([2*k,3*k]);
+      for (const q of [lo,hi]){ const s = M(q[0],q[2]), o = M(0,0); ctx.beginPath(); ctx.moveTo(s[0],s[1]); ctx.lineTo(o[0],o[1]); ctx.stroke(); }
+      ctx.setLineDash([]);
+      const o = M(0,0); ctx.fillStyle = '#e4e8f1'; ctx.beginPath(); ctx.arc(o[0],o[1],3.5*k,0,7); ctx.fill();
+      ctx.restore();
+      ctx.font = `${10.5*k}px IBM Plex Sans, sans-serif`; ctx.textAlign = 'left';
+      ctx.fillStyle = '#8c95aa'; ctx.fillText('Vista desde arriba', mx+7*k, my+14*k);
+      ctx.fillStyle = '#7cc4ff'; ctx.fillText('dónde está ahora', mx+7*k, my+28*k);
+      ctx.fillStyle = '#f0a35e'; ctx.fillText('de dónde salió la luz', mx+7*k, my+42*k);
+      ctx.fillStyle = '#8c95aa'; ctx.textAlign = 'center'; ctx.fillText('cámara', o[0], my+mh-3*k);
+    }
+
+    $('#hud-obj').innerHTML = `β = ${fx(b,3)} · γ = ${fmtGamma(g)}<br>t = ${fx(t,2)} (unidades de tamaño/c)`;
+    $('#o-out').innerHTML = [
+      ['Longitud medida', fx(1/g,3)+' × L'],
+      ['Giro aparente de Terrell', fx(Math.asin(b)*180/Math.PI,1)+'°'],
+      ['Retraso de la luz del centro', fx(t - tc,2)+' L/c'],
+      ['Doppler acercándose', '×'+sci(Math.sqrt((1+b)/(1-b)))],
+      ['Doppler alejándose', '×'+sci(Math.sqrt((1-b)/(1+b)))],
+    ].map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+  }
+
+  // intervalo de tiempo en el que la imagen vista está en pantalla (el retraso de la luz lo desplaza)
+  let win = [-1.6, 1.6];
+  function visWindow(){
+    const b = S.beta, g = 1/Math.sqrt(1-b*b), d = G.d, lim = Math.tan(52*Math.PI/180)*1.05;
+    let xmin = Infinity, xmax = -Infinity;
+    for (const L of G.lines) for (const p of L){ xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); }
+    let a = null, z = null;
+    for (let i = 0; i <= 1600; i++){
+      const p = -5 + 10*i/1600, t = p*3.5/Math.max(b, 0.05);
+      const X = [xmin, 0, xmax].map(x0 => { const X0 = x0/g, A = t + X0*b, B = 1-b*b, C = t*t - X0*X0 - (Y0*Y0 + d*d); return X0 + b*(A - Math.sqrt(Math.max(A*A - B*C, 0)))/B; });
+      const vis = X.some(x => Math.abs(x/d) < lim) || (X[0] < 0 && X[2] > 0);
+      if (vis){ if (a === null) a = p; z = p; }
+    }
+    win = [a === null ? -1.6 : a - 0.03, z === null ? 1.6 : z + 0.03];
+    const el = $('#o-time'); el.min = win[0].toFixed(3); el.max = win[1].toFixed(3);
+    S.p = Math.min(win[1], Math.max(win[0], S.p)); tR.set(S.p);
+  }
+  const tR = range('o-time', v => { S.p = v; S.dirty = true; }, v => fx(v,2));
+  range('o-beta', v => { S.beta = v; visWindow(); S.dirty = true; }, v => fx(v,3));
+  seg('o-shape', v => { S.shape = v; G = geom(v); visWindow(); S.dirty = true; });
+  visWindow();
+  check('o-vis', v => { S.vis = v; S.dirty = true; });
+  check('o-meas', v => { S.meas = v; S.dirty = true; });
+  check('o-gal', v => { S.gal = v; S.dirty = true; });
+  check('o-dopp', v => { S.dopp = v; S.dirty = true; });
+  check('o-map', v => { S.map = v; S.dirty = true; });
+  $('#o-play').addEventListener('click', () => { S.play = !S.play; $('#o-play').textContent = S.play ? 'Pausar' : 'Reproducir'; });
+  return {
+    frame(dt){
+      if (S.play){ S.p += dt*(win[1] - win[0])/7; if (S.p > win[1]) S.p = win[0]; tR.set(S.p); S.dirty = true; }  // una pasada cada 7 s
+      if (S.dirty){ S.dirty = false; render(); }
+    },
+    resize(){ S.dirty = true; }
+  };
+})();
+
+/* =====================================================================
+   3. LUZ Y ÓRBITAS (geodésicas en el plano)
+   ===================================================================== */
+const Luz = (() => {
+  const cv = $('#cv-luz'), ctx = cv.getContext('2d');
+  const S = {mode:'beam', n:41, bmax:7, b:2.7, re:2.2, np:72, rp:8, ra:20, spd:2, zoom:11, dirty:true, paths:null, orbit:null, lam:Math.pow(10,0.3), wview:'int', wf:null, wbusy:false, phase:0, sigs:{}, spin:1};
+  const BC = 3*Math.sqrt(3)/2;
+
+  // Integra una geodésica nula: fuerza ficticia −1.5 h² r̂ / r⁴ (r_s = 1)
+  function trace(x, y, vx, vy, rMax, stepK, record, maxSteps = 30000){
+    const h2 = (x*vy - y*vx)**2;
+    const acc = (x,y) => { const r2 = x*x+y*y, r = Math.sqrt(r2), k = -1.5*h2/(r2*r2*r); return [k*x, k*y]; };
+    const pts = record ? [x,y] : null; let turn = 0, status = 'trap';
+    for (let i = 0; i < maxSteps; i++){
+      const r = Math.hypot(x,y), dt = stepK*r/Math.hypot(vx,vy);
+      const a1 = acc(x,y);
+      const x2 = x+.5*dt*vx, y2 = y+.5*dt*vy, vx2 = vx+.5*dt*a1[0], vy2 = vy+.5*dt*a1[1], a2 = acc(x2,y2);
+      const x3 = x+.5*dt*vx2, y3 = y+.5*dt*vy2, vx3 = vx+.5*dt*a2[0], vy3 = vy+.5*dt*a2[1], a3 = acc(x3,y3);
+      const x4 = x+dt*vx3, y4 = y+dt*vy3, vx4 = vx+dt*a3[0], vy4 = vy+dt*a3[1], a4 = acc(x4,y4);
+      const nx = x + dt/6*(vx+2*vx2+2*vx3+vx4), ny = y + dt/6*(vy+2*vy2+2*vy3+vy4);
+      const nvx = vx + dt/6*(a1[0]+2*a2[0]+2*a3[0]+a4[0]), nvy = vy + dt/6*(a1[1]+2*a2[1]+2*a3[1]+a4[1]);
+      turn += Math.atan2(vx*nvy - vy*nvx, vx*nvx + vy*nvy);
+      x = nx; y = ny; vx = nvx; vy = nvy;
+      if (record && (i % 2 === 0 || Math.hypot(x,y) < 3)) pts.push(x,y);
+      const rn = Math.hypot(x,y);
+      if (rn < 1){ status = 'cap'; if (record) pts.push(x,y); break; }
+      if (rn > rMax && x*vx + y*vy > 0){ status = 'esc'; if (record) pts.push(x,y); break; }
+    }
+    return {pts, status, turn};
+  }
+  function computeBeam(){
+    const P = [], n = S.n;
+    for (let i = 0; i < n; i++){
+      const b = n === 1 ? 0 : -S.bmax + 2*S.bmax*i/(n-1);
+      P.push({b, ...trace(-70, b, 1, 0, 90, 0.02, true)});
+    }
+    const hl = trace(-70, S.b, 1, 0, 90, 0.01, true);
+    const acc = trace(-3000, S.b, 1, 0, 3000, 0.01, false, 200000);
+    return {rays:P, hl, defl: Math.abs(acc.turn), hlStatus: acc.status};
+  }
+  function computePoint(){
+    const r = S.re, P = [], gs = 1/Math.sqrt(1 - 1/r);
+    for (let i = 0; i < S.np; i++){
+      const psi = 2*Math.PI*(i+0.5)/S.np; // ángulo desde la vertical hacia fuera (eje +x)
+      const vx = Math.cos(psi), vy = Math.sin(psi)*gs;
+      P.push({psi, ...trace(r, 0, vx, vy, 90, 0.02, true)});
+    }
+    return {rays:P};
+  }
+  function orbitParams(){
+    const up = 1/S.rp, ua = 1/S.ra;
+    const h2 = 1/((up+ua) - (up*up + up*ua + ua*ua)); // r_s = 1, GM = 1/2
+    const u3 = 1 - up - ua;
+    const stable = h2 > 0 && u3 > up;
+    let exact = null;
+    if (stable){
+      let s = 0; const M = 2000;
+      for (let i = 0; i < M; i++){ const c = Math.PI*(i+.5)/M, u = ua + (up-ua)*(1-Math.cos(c))/2; s += 1/Math.sqrt(u3 - u); }
+      exact = 2*s*Math.PI/M - 2*Math.PI;
+    }
+    const weak = 3*Math.PI/(2*S.rp*S.ra/(S.rp+S.ra));
+    return {h2, stable, exact, weak};
+  }
+  function launch(){
+    const o = orbitParams();
+    const h = Math.sqrt(Math.max(o.h2, 0.0001));
+    S.orbit = {x:S.rp, y:0, vx:0, vy:h/S.rp, h2:h*h, trail:[S.rp,0], lastVr:0, peri:[], phi:0, prevAng:0, fell:false, params:o};
+  }
+  function stepOrbit(simT){
+    const O = S.orbit; if (!O || O.fell) return;
+    const acc = (x,y) => { const r2 = x*x+y*y, r = Math.sqrt(r2), k = -0.5/(r2*r) - 1.5*O.h2/(r2*r2*r); return [k*x,k*y]; };
+    let left = simT;
+    while (left > 0){
+      const r = Math.hypot(O.x,O.y), dt = Math.min(left, 0.01*Math.pow(r,1.5));
+      left -= dt;
+      let {x,y,vx,vy} = O;
+      const a1 = acc(x,y);
+      const x2=x+.5*dt*vx, y2=y+.5*dt*vy, vx2=vx+.5*dt*a1[0], vy2=vy+.5*dt*a1[1], a2=acc(x2,y2);
+      const x3=x+.5*dt*vx2, y3=y+.5*dt*vy2, vx3=vx+.5*dt*a2[0], vy3=vy+.5*dt*a2[1], a3=acc(x3,y3);
+      const x4=x+dt*vx3, y4=y+dt*vy3, vx4=vx+dt*a3[0], vy4=vy+dt*a3[1], a4=acc(x4,y4);
+      O.x = x + dt/6*(vx+2*vx2+2*vx3+vx4); O.y = y + dt/6*(vy+2*vy2+2*vy3+vy4);
+      O.vx = vx + dt/6*(a1[0]+2*a2[0]+2*a3[0]+a4[0]); O.vy = vy + dt/6*(a1[1]+2*a2[1]+2*a3[1]+a4[1]);
+      const ang = Math.atan2(O.y,O.x); let da = ang - O.prevAng; if (da > Math.PI) da -= 2*Math.PI; if (da < -Math.PI) da += 2*Math.PI; O.phi += da; O.prevAng = ang;
+      const vr = O.x*O.vx + O.y*O.vy;
+      if (O.lastVr < 0 && vr >= 0) O.peri.push(O.phi);
+      O.lastVr = vr;
+      if (Math.hypot(O.x,O.y) < 1){ O.fell = true; break; }
+    }
+    O.trail.push(O.x, O.y); if (O.trail.length > 12000) O.trail.splice(0, O.trail.length - 12000);
+  }
+
+  /* ---------- ondas: ecuación de Regge–Wheeler (espín 1), r_s = 1 ---------- */
+  function rwSolve(l, w, rMatch, sR, NR, out, sp){
+    let r = 1 + 1e-9; const rs0 = r + Math.log(r - 1);
+    let ur = Math.cos(w*rs0), ui = -Math.sin(w*rs0), pr = w*ui, pi = -w*ur;   // u = e^{−iωr*}: solo entra en el horizonte
+    const L = l*(l+1), w2 = w*w, h = Math.min(2*Math.PI/w/40, 0.05), K = l + 1, c3 = 1 - sp*sp, dirac = sp === 0.5;
+    // potencial efectivo: Regge–Wheeler para s = 0, 1, 2; Dirac (W² + dW/dr*) para s = ½, con j + ½ = l + 1
+    const V = r => { const f = 1 - 1/r; return dirac ? K*K*f/(r*r) + K*Math.sqrt(f)*(0.5/(r*r*r) - f/(r*r)) : f*(L/(r*r) + c3/(r*r*r)); };
+    let k = 0, nsc = 0;
+    while (r < rMatch){
+      let f = 1 - 1/r, q = V(r) - w2;
+      const a1 = f, b1r = pr, b1i = pi, c1r = q*ur, c1i = q*ui;
+      const r2 = r + .5*h*a1, u2r = ur + .5*h*b1r, u2i = ui + .5*h*b1i, p2r = pr + .5*h*c1r, p2i = pi + .5*h*c1i;
+      f = 1 - 1/r2; q = V(r2) - w2;
+      const a2 = f, c2r = q*u2r, c2i = q*u2i;
+      const r3 = r + .5*h*a2, u3r = ur + .5*h*p2r, u3i = ui + .5*h*p2i, p3r = pr + .5*h*c2r, p3i = pi + .5*h*c2i;
+      f = 1 - 1/r3; q = V(r3) - w2;
+      const a3 = f, c3r = q*u3r, c3i = q*u3i;
+      const r4 = r + h*a3, u4r = ur + h*p3r, u4i = ui + h*p3i, p4r = pr + h*c3r, p4i = pi + h*c3i;
+      f = 1 - 1/r4; q = V(r4) - w2;
+      const a4 = f, c4r = q*u4r, c4i = q*u4i;
+      const nr = r + h/6*(a1 + 2*a2 + 2*a3 + a4);
+      const nur = ur + h/6*(b1r + 2*p2r + 2*p3r + p4r), nui = ui + h/6*(b1i + 2*p2i + 2*p3i + p4i);
+      const npr = pr + h/6*(c1r + 2*c2r + 2*c3r + c4r), npi = pi + h/6*(c1i + 2*c2i + 2*c3i + c4i);
+      if (out) while (k < NR && sR[k] <= nr){ const t = (sR[k] - r)/(nr - r); out[2*k] = ur + t*(nur - ur); out[2*k+1] = ui + t*(nui - ui); k++; }
+      r = nr; ur = nur; ui = nui; pr = npr; pi = npi;
+      // dentro de la barrera de potencial la solución crece exponencialmente: se reescala para no desbordar
+      if (Math.abs(ur) + Math.abs(ui) > 1e100){
+        ur *= 1e-100; ui *= 1e-100; pr *= 1e-100; pi *= 1e-100; nsc++;
+        if (out) for (let j = 0; j < 2*k; j++) out[j] *= 1e-100;
+      }
+    }
+    return {r, ur, ui, pr, pi, nsc};   // nsc: veces que se reescaló (la amplitud real es 10^(100·nsc) mayor)
+  }
+  // amplitud entrante A en r*: u = A ĥ⁻(ωr*) + B ĥ⁺(ωr*), con funciones de Riccati–Hankel
+  function amplitudeIn(sol, l, w){
+    const x = w*(sol.r + Math.log(sol.r - 1));
+    const j0 = Math.sin(x)/x, y0 = -Math.cos(x)/x, j1 = Math.sin(x)/(x*x) - Math.cos(x)/x, y1 = -Math.cos(x)/(x*x) - Math.sin(x)/x;
+    let jm = j0, ym = y0, jl = j1, yl = y1;
+    for (let n = 1; n < l; n++){ const jn = (2*n+1)/x*jl - jm, yn = (2*n+1)/x*yl - ym; jm = jl; ym = yl; jl = jn; yl = yn; }
+    let F = x*jl, G = x*yl, dF = w*(x*jm - l*jl), dG = w*(x*ym - l*yl);
+    if (l === 0){ F = Math.sin(x); G = -Math.cos(x); dF = w*Math.cos(x); dG = w*Math.sin(x); }
+    const hpr = F, hpi = G, hpdr = dF, hpdi = dG, hmr = F, hmi = -G, hmdr = dF, hmdi = -dG;
+    const Wr = (hmr*hpdr - hmi*hpdi) - (hmdr*hpr - hmdi*hpi), Wi = (hmr*hpdi + hmi*hpdr) - (hmdr*hpi + hmdi*hpr);
+    const nr_ = (sol.ur*hpdr - sol.ui*hpdi) - (sol.pr*hpr - sol.pi*hpi), ni_ = (sol.ur*hpdi + sol.ui*hpdr) - (sol.pr*hpi + sol.pi*hpr);
+    const d = Wr*Wr + Wi*Wi;
+    return [(nr_*Wr + ni_*Wi)/d, (ni_*Wr - nr_*Wi)/d];
+  }
+  const lMin = sp => sp === 0.5 ? 0 : sp;                       // la luz no tiene l = 0; la gravedad, ni l = 0 ni l = 1
+  const deg = (l, sp) => sp === 0.5 ? 2*(l + 1) : 2*l + 1;       // 2j + 1, con j = l + ½ para el campo de Dirac
+  function sigmaAbs(w, sp){
+    const l0 = lMin(sp), lmax = Math.max(l0 + 3, Math.ceil(w*2.6*1.4 + 8)), rm = Math.max(12, (lmax + 3)/w);
+    let s = 0;
+    for (let l = l0; l <= lmax; l++){ const sol = rwSolve(l, w, rm, null, 0, null, sp); if (sol.nsc) continue; const A = amplitudeIn(sol, l, w); s += deg(l, sp)/(A[0]*A[0] + A[1]*A[1]); }
+    return Math.PI/(w*w)*s;
+  }
+  const SIG_GEO = 27*Math.PI/4;
+  function computeWave(W, H){
+    const w = 2*Math.PI/S.lam, m = Math.min(W, H);
+    const hx = S.zoom*W/m, hy = S.zoom*H/m, Rv = Math.hypot(hx, hy) + 0.5;
+    // se empalma lejos (16·R) porque la cola gravitatoria de largo alcance converge despacio
+    const lmax = Math.ceil(w*Rv + 12), rm = Math.max(16*Rv, (lmax + 2)/w + 5);
+    const NR = 700, sR = new Float64Array(NR); for (let k = 0; k < NR; k++) sR[k] = 1 + (Rv - 1)*k/(NR - 1);
+    const Cf = new Float64Array((lmax + 2)*NR*2), tmp = new Float64Array(NR*2);
+    const sp = S.spin, l0 = lMin(sp);
+    // multipolos que este campo no tiene (l < s): se dejan como parte libre de la onda plana, sin dispersión
+    for (let l = 0; l < l0; l++) for (let k = 0; k < NR; k++){
+      const x = w*sR[k], j = l === 0 ? Math.sin(x)/x : Math.sin(x)/(x*x) - Math.cos(x)/x, o = (l*NR + k)*2;
+      if (l === 0){ Cf[o] = j; Cf[o+1] = 0; } else { Cf[o] = 0; Cf[o+1] = 3*j; }   // (2l+1) iˡ j_l
+    }
+    let sig = 0;
+    for (let l = l0; l <= lmax; l++){
+      const sol = rwSolve(l, w, rm, sR, NR, tmp, sp);
+      const A = amplitudeIn(sol, l, w), dA = A[0]*A[0] + A[1]*A[1];
+      if (!sol.nsc) sig += deg(l, sp)/dA;                  // Γ_l = 1/|A|² (≈ 0 si hubo que reescalar)
+      const il = [[1,0],[0,1],[-1,0],[0,-1]][l % 4];
+      const fr = (il[0]*A[0] + il[1]*A[1])/dA, fi = (il[1]*A[0] - il[0]*A[1])/dA;   // iˡ / A
+      for (let k = 0; k < NR; k++){
+        const c = (2*l+1)/(2*w*sR[k]), ur = tmp[2*k], ui = tmp[2*k+1], o = (l*NR + k)*2;
+        Cf[o] = c*(ur*fr - ui*fi); Cf[o+1] = c*(ur*fi + ui*fr);
+      }
+    }
+    sig *= Math.PI/(w*w);
+    const Nx = Math.min(520, Math.max(230, Math.ceil(2*hx/S.lam*6))), Ny = Math.max(2, Math.round(Nx*H/W));   // ≥ 6 píxeles por longitud de onda
+    const Fr = new Float32Array(Nx*Ny), Fi = new Float32Array(Nx*Ny), In = new Uint8Array(Nx*Ny);
+    for (let j = 0; j < Ny; j++) for (let i = 0; i < Nx; i++){
+      const x = -hx + 2*hx*(i + .5)/Nx, y = hy - 2*hy*(j + .5)/Ny, r = Math.hypot(x, y), p = j*Nx + i;
+      if (r < 1.01){ In[p] = 1; continue; }
+      const t = Math.min((r - 1)/(Rv - 1)*(NR - 1), NR - 1.0001), kk = Math.floor(t), fz = t - kk, c = x/r;
+      let P0 = 1, P1 = c, sr = 0, si = 0;
+      for (let l = 0; l <= lmax; l++){
+        const Pl = l === 0 ? 1 : P1;
+        const o = (l*NR + kk)*2;
+        sr += Pl*(Cf[o] + fz*(Cf[o+2] - Cf[o])); si += Pl*(Cf[o+1] + fz*(Cf[o+3] - Cf[o+1]));
+        if (l >= 1){ const P2 = ((2*l+1)*c*P1 - l*P0)/(l+1); P0 = P1; P1 = P2; }
+      }
+      Fr[p] = sr; Fi[p] = si;
+    }
+    return {key: [S.lam, S.zoom, W, H, S.spin].join(','), lam: S.lam, spin: S.spin, Nx, Ny, Fr, Fi, In, sig, lmax, w};
+  }
+  const oc = document.createElement('canvas'); const octx = oc.getContext('2d');
+  function ramp(stops, t){
+    t = Math.max(0, Math.min(1, t));
+    for (let i = 1; i < stops.length; i++) if (t <= stops[i][0]){ const a = stops[i-1], b = stops[i], u = (t - a[0])/(b[0] - a[0]); return [0,1,2].map(n => a[1][n] + u*(b[1][n] - a[1][n])); }
+    return stops[stops.length-1][1];
+  }
+  const RAMP_I = [[0,[5,7,13]],[0.35,[28,52,104]],[0.6,[124,196,255]],[0.82,[236,244,255]],[1,[240,163,94]]];
+  function drawWave(W, H){
+    const F = S.wf; if (!F) return;
+    if (oc.width !== F.Nx || oc.height !== F.Ny){ oc.width = F.Nx; oc.height = F.Ny; }
+    const img = octx.createImageData(F.Nx, F.Ny), D = img.data;
+    const cr = Math.cos(S.phase), ci = -Math.sin(S.phase);
+    for (let p = 0; p < F.Nx*F.Ny; p++){
+      let c;
+      if (F.In[p]) c = [0,0,0];
+      else if (S.wview === 'int'){ const I = F.Fr[p]*F.Fr[p] + F.Fi[p]*F.Fi[p]; c = ramp(RAMP_I, (Math.log10(Math.max(I, 1e-6)) + 2)/2.8); }
+      else {
+        const v = (F.Fr[p]*cr - F.Fi[p]*ci)/1.4, a = Math.min(1, Math.pow(Math.abs(v), 0.8));
+        c = v >= 0 ? [5 + a*235, 7 + a*156, 13 + a*81] : [5 + a*119, 7 + a*189, 13 + a*242];
+      }
+      D[4*p] = c[0]; D[4*p+1] = c[1]; D[4*p+2] = c[2]; D[4*p+3] = 255;
+    }
+    octx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(oc, 0, 0, W, H);
+  }
+  // curva de absorción: se calcula poco a poco para no bloquear la página
+  function startSigmaCurve(){
+    const sp = S.spin; if (S.sigs[sp]) return;
+    const arr = S.sigs[sp] = []; const lams = []; for (let i = 0; i < 30; i++) lams.push(Math.pow(10, -0.523 + 2.0*i/29));
+    let i = 0;
+    const step = () => { if (i >= lams.length) return; const w = 2*Math.PI/lams[i]; arr.push([lams[i], sigmaAbs(w, sp)/SIG_GEO]); i++; drawSigma(); setTimeout(step, 0); };
+    step();
+  }
+  function drawSigma(){
+    const c = $('#l-sigma'); if (!c || c.offsetParent === null) return;
+    fitCanvas(c); const x = c.getContext('2d'), W = c.width, H = c.height, k = DPR();
+    x.clearRect(0,0,W,H);
+    const L = 34*k, Bm = 22*k, Tm = 6*k, Rm = 8*k, w = W - L - Rm, h = H - Bm - Tm;
+    const X = lam => L + w*(Math.log10(lam) + 0.523)/2.0, Y = v => Tm + h*(1 - Math.min(v, 1.15)/1.15);
+    x.font = `${10.5*k}px IBM Plex Mono, monospace`; x.fillStyle = '#8c95aa'; x.strokeStyle = '#1c2436'; x.lineWidth = 1;
+    for (const v of [0, 0.5, 1]){ const yy = Y(v); x.beginPath(); x.moveTo(L, yy); x.lineTo(L+w, yy); x.stroke(); x.textAlign = 'right'; x.fillText(fx(v,1), L - 5*k, yy + 4*k); }
+    for (const lam of [0.3, 1, 3, 10, 30]){ x.textAlign = lam === 0.3 ? 'left' : lam === 30 ? 'right' : 'center'; x.fillText(String(lam).replace('.', ','), X(lam), H - 6*k); }
+    x.textAlign = 'right'; x.fillText('λ / r_s', L + w, Tm + 12*k);
+    const cur = S.sigs[S.spin];
+    if (cur && cur.length > 1){
+      x.strokeStyle = '#7cc4ff'; x.lineWidth = 2*k; x.beginPath();
+      cur.forEach(([lam, v], i) => { i ? x.lineTo(X(lam), Y(v)) : x.moveTo(X(lam), Y(v)); }); x.stroke();
+    }
+    if (S.wf && S.wf.spin === S.spin){ x.fillStyle = '#f0a35e'; x.beginPath(); x.arc(X(S.wf.lam), Y(S.wf.sig/SIG_GEO), 4.5*k, 0, 7); x.fill(); }
+  }
+  const BANDS = [[1e-11,'rayos gamma'],[1e-8,'rayos X'],[3.8e-7,'ultravioleta'],[7.5e-7,'luz visible'],[1e-3,'infrarrojo'],[1,'microondas'],[Infinity,'radio']];
+  const band = m => BANDS.find(b => m < b[0])[1];
+  function fmtLen(m){ if (m < 1e-12) return sci(m*1e15)+' fm'; if (m < 1e-9) return sci(m*1e12)+' pm'; if (m < 1e-6) return sci(m*1e9)+' nm'; if (m < 1e-3) return sci(m*1e6)+' µm'; if (m < 1) return sci(m*1e3)+' mm'; if (m < 1e3) return sci(m)+' m'; if (m < 1e9) return sci(m/1e3)+' km'; return sci(m/1.496e11)+' UA'; }
+
+  function render(){
+    fitCanvas(cv);
+    const W = cv.width, H = cv.height, k = DPR();
+    const sc = Math.min(W,H)/2/S.zoom, cx = W/2, cy = H/2;
+    const P = (x,y) => [cx + x*sc, cy - y*sc];
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0,0,W,H);
+    if (S.mode === 'wave'){
+      const key = [S.lam, S.zoom, W, H, S.spin].join(',');
+      if ((!S.wf || S.wf.key !== key) && !S.wbusy){
+        S.wbusy = true;
+        setTimeout(() => { S.wf = computeWave(W, H); S.wbusy = false; S.dirty = true; drawSigma(); }, 30);
+      }
+      drawWave(W, H);
+    }
+    // rejilla
+    ctx.strokeStyle = 'rgba(120,140,180,.08)'; ctx.lineWidth = 1*k;
+    const step = S.zoom > 25 ? 10 : S.zoom > 10 ? 5 : 1;
+    for (let v = -Math.ceil(S.zoom*W/Math.min(W,H)/step)*step; v <= S.zoom*W/Math.min(W,H); v += step){ const a = P(v,0); ctx.beginPath(); ctx.moveTo(a[0],0); ctx.lineTo(a[0],H); ctx.stroke(); }
+    for (let v = -Math.ceil(S.zoom*H/Math.min(W,H)/step)*step; v <= S.zoom*H/Math.min(W,H); v += step){ const a = P(0,v); ctx.beginPath(); ctx.moveTo(0,a[1]); ctx.lineTo(W,a[1]); ctx.stroke(); }
+    const poly = (pts, style, w) => { ctx.strokeStyle = style; ctx.lineWidth = w; ctx.beginPath(); for (let i = 0; i < pts.length; i += 2){ const q = P(pts[i],pts[i+1]); i ? ctx.lineTo(q[0],q[1]) : ctx.moveTo(q[0],q[1]); } ctx.stroke(); };
+
+    let hud = '';
+    if (S.mode === 'beam'){
+      if (!S.paths || S.paths.kind !== 'beam') S.paths = {kind:'beam', ...computeBeam()};
+      const B = S.paths;
+      ctx.setLineDash([5*k,5*k]); ctx.strokeStyle = 'rgba(240,163,94,.35)'; ctx.lineWidth = 1*k;
+      for (const s of [1,-1]){ const a = P(-S.zoom*3, s*BC), c = P(S.zoom*3, s*BC); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); }
+      ctx.setLineDash([]);
+      for (const r of B.rays){
+        const style = r.status === 'cap' ? 'rgba(240,163,94,.55)' : `rgba(124,196,255,${0.35 + 0.45*Math.exp(-Math.abs(r.b)/4)})`;
+        poly(r.pts, style, 1.2*k);
+      }
+      poly(B.hl.pts, '#ffffff', 2.2*k);
+      const w1 = 2/S.b, w2 = 2/S.b + 15*Math.PI/16/(S.b*S.b);
+      const deg = a => fx(a*180/Math.PI, a*180/Math.PI < 10 ? 3 : 1)+'°';
+      $('#l-beam-out').innerHTML = (B.hlStatus === 'cap'
+        ? `<dt>Rayo destacado</dt><dd>capturado</dd><dt>b frente a b<sub>c</sub></dt><dd>${fx(S.b,3)} &lt; ${fx(BC,3)}</dd>`
+        : `<dt>Deflexión calculada</dt><dd>${deg(B.defl)}</dd><dt>Vueltas completas</dt><dd>${Math.floor(B.defl/(2*Math.PI))}</dd><dt>Aproximación 2r<sub>s</sub>/b</dt><dd>${deg(w1)}</dd><dt>Con 2.º orden</dt><dd>${deg(w2)}</dd>`)
+        + `<dt>b crítico</dt><dd>${fx(BC,4)} r<sub>s</sub></dd>`;
+      hud = `Haz paralelo desde la izquierda<br><span style="color:#7cc4ff">escapa</span> · <span style="color:#f0a35e">capturado</span> · líneas: b = ±b<sub>c</sub>`;
+    } else if (S.mode === 'point'){
+      if (!S.paths || S.paths.kind !== 'point') S.paths = {kind:'point', ...computePoint()};
+      const r = S.re, s = (BC/r)*Math.sqrt(1 - 1/r);
+      const psiC = r >= 1.5 ? Math.PI - Math.asin(Math.min(s,1)) : Math.asin(Math.min(s,1));
+      // cono de escape
+      const o = P(r,0);
+      ctx.fillStyle = 'rgba(124,196,255,.12)'; ctx.beginPath(); ctx.moveTo(o[0],o[1]); ctx.arc(o[0],o[1], 2.2*sc, -psiC, psiC); ctx.closePath(); ctx.fill();
+      let esc = 0;
+      for (const ry of S.paths.rays){ if (ry.status === 'esc') esc++; poly(ry.pts, ry.status === 'esc' ? 'rgba(124,196,255,.75)' : 'rgba(240,163,94,.6)', 1.2*k); }
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(o[0],o[1],4*k,0,7); ctx.fill();
+      const frac3 = (1 - Math.cos(psiC))/2;
+      $('#l-point-out').innerHTML = `<dt>Semiángulo del cono de escape</dt><dd>${fx(psiC*180/Math.PI,1)}°</dd><dt>Rayos que escapan</dt><dd>${esc} de ${S.np}</dd><dt>Luz que escapa (3D)</dt><dd>${fx(100*frac3,1)} %</dd><dt>Corrimiento al rojo visto lejos</dt><dd>×${fx(Math.sqrt(1-1/r),3)}</dd>`;
+      hud = `Fuente estática en r = ${fx(r,2)} r<sub>s</sub><br>zona azul: direcciones que escapan`;
+    } else if (S.mode === 'wave'){
+      ctx.setLineDash([5*k,5*k]); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1*k;
+      for (const s of [1,-1]){ const a = P(-S.zoom*3, s*BC), c = P(S.zoom*3, s*BC); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); }
+      ctx.setLineDash([]);
+      const F = S.wf, lam = S.lam;
+      const KIND = {0:['escalar sin masa','σ → área del horizonte'], 0.5:['fermión sin masa (neutrino ideal)','σ → área/8 (Unruh)'], 1:['fotón','σ ∝ ω² (Page)'], 2:['gravitón (onda gravitatoria)','σ ∝ ω⁴ (Page)']}[S.spin];
+      const rows = [['Campo', KIND[0]], ['Con λ muy larga', KIND[1]], ['λ / r<sub>s</sub>', fx(lam, lam < 1 ? 2 : 1)], ['ω r<sub>s</sub>/c', fx(2*Math.PI/lam, 2)]];
+      if (F && !S.wbusy && Math.abs(F.lam - lam) < 1e-9 && F.spin === S.spin) rows.push(['Absorción / límite de rayos', fx(F.sig/SIG_GEO, 3)], ['Multipolos sumados', String(F.lmax)]);
+      else rows.push(['Absorción / límite de rayos', 'calculando…']);
+      for (const [n, rs] of [['Primordial de 10¹² kg', 1.485e-15], ['Estelar de 10 M☉', 2.953e4], ['Sagitario A*', 1.27e10]]){ const m = lam*rs; rows.push([n, fmtLen(m)+' · '+band(m)]); }
+      $('#l-wave-out').innerHTML = rows.map(r => `<dt>${r[0]}</dt><dd>${r[1]}</dd>`).join('');
+      hud = (S.wbusy || !F || F.spin !== S.spin ? 'Calculando la onda…<br>' : '') + `Onda plana de espín ${S.spin === 0.5 ? '½' : S.spin} y λ = ${fx(lam, lam < 1 ? 2 : 1)} r<sub>s</sub> desde la izquierda<br>` +
+        (S.wview === 'int' ? 'intensidad respecto a la onda incidente (escala logarítmica)' : 'campo en movimiento: ámbar positivo, azul negativo');
+    } else {
+      if (!S.orbit) launch();
+      const O = S.orbit;
+      poly(O.trail, 'rgba(124,196,255,.8)', 1.4*k);
+      // periastros
+      ctx.strokeStyle = 'rgba(240,163,94,.6)'; ctx.lineWidth = 1*k;
+      for (const ph of O.peri){ const a = P(0,0), c = P(S.rp*Math.cos(ph)*1.15, S.rp*Math.sin(ph)*1.15); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(c[0],c[1]); ctx.stroke(); }
+      const q = P(O.x,O.y); ctx.fillStyle = O.fell ? '#f0a35e' : '#ffffff'; ctx.beginPath(); ctx.arc(q[0],q[1],4.5*k,0,7); ctx.fill();
+      // ISCO
+      ctx.setLineDash([2*k,4*k]); ctx.strokeStyle = 'rgba(160,170,190,.4)'; const c0 = P(0,0); ctx.beginPath(); ctx.arc(c0[0],c0[1],3*sc,0,7); ctx.stroke(); ctx.setLineDash([]);
+      const pr = O.params, deg = a => a === null ? '—' : fx(a*180/Math.PI, 2)+'°';
+      let meas = null; if (O.peri.length >= 2){ const n = O.peri.length; meas = (O.peri[n-1] - O.peri[0])/(n-1) - 2*Math.PI; }
+      $('#l-orbit-out').innerHTML = O.fell || !pr.stable
+        ? `<dt>Estado</dt><dd>${O.fell ? 'cruza el horizonte' : 'órbita inestable'}</dd><dt>Motivo</dt><dd>${pr.h2 <= 0 ? 'no hay órbita ligada' : 'periastro bajo la barrera'}</dd>`
+        : `<dt>Precesión exacta</dt><dd>${deg(pr.exact)}/vuelta</dd><dt>Precesión medida</dt><dd>${deg(meas)}</dd><dt>Campo débil 3πr<sub>s</sub>/a(1−e²)</dt><dd>${deg(pr.weak)}</dd><dt>Periastros registrados</dt><dd>${O.peri.length}</dd>`;
+      hud = `Partícula con masa · trazos ámbar: periastros<br>círculo punteado: órbita estable más interna (3 r<sub>s</sub>)`;
+    }
+    // agujero negro y esfera de fotones
+    const c0 = P(0,0);
+    ctx.setLineDash([4*k,4*k]); ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1*k; ctx.beginPath(); ctx.arc(c0[0],c0[1],1.5*sc,0,7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(c0[0],c0[1],sc,0,7); ctx.fill();
+    ctx.strokeStyle = '#f0a35e'; ctx.lineWidth = 1.5*k; ctx.stroke();
+    // escala
+    ctx.fillStyle = '#8c95aa'; ctx.font = `${11*k}px IBM Plex Mono, monospace`; ctx.textAlign = 'left';
+    const a = 12*k, yb = H - 14*k; ctx.strokeStyle = '#8c95aa'; ctx.beginPath(); ctx.moveTo(a,yb); ctx.lineTo(a+step*sc,yb); ctx.stroke();
+    ctx.fillText(step+' r_s', a, yb - 6*k);
+    $('#hud-luz').innerHTML = hud;
+  }
+
+  const ro = () => { S.paths = null; S.dirty = true; };
+  range('l-n', v => { S.n = v; ro(); }, v => String(v));
+  range('l-bmax', v => { S.bmax = v; ro(); }, v => fx(v,1)+' r_s');
+  range('l-b', v => { S.b = v; ro(); }, v => fx(v,3)+' r_s');
+  range('l-re', v => { S.re = v; ro(); }, v => fx(v,2)+' r_s');
+  range('l-np', v => { S.np = v; ro(); }, v => String(v));
+  const rpR = range('l-rp', v => { S.rp = v; if (S.ra < v){ S.ra = v; raR.set(v); } launch(); S.dirty = true; }, v => fx(v,1)+' r_s');
+  const raR = range('l-ra', v => { S.ra = Math.max(v, S.rp); if (v < S.rp) raR.set(S.rp); launch(); S.dirty = true; }, v => fx(v,1)+' r_s');
+  range('l-spd', v => { S.spd = v; }, v => '×'+fx(v,1));
+  const zR = range('l-zoom', v => { if (S.mode === 'wave' && v > 14){ v = 14; zR.set(14); } S.zoom = v; S.dirty = true; }, v => fx(v,1)+' r_s');
+  $('#l-launch').addEventListener('click', () => { launch(); S.dirty = true; });
+  range('l-lam', v => { S.lam = Math.pow(10, v); S.dirty = true; }, v => { const l = Math.pow(10, v); return fx(l, l < 1 ? 2 : 1)+' r_s'; });
+  seg('l-wview', v => { S.wview = v; S.dirty = true; });
+  seg('l-spin', v => { S.spin = parseFloat(v); startSigmaCurve(); drawSigma(); S.dirty = true; });
+  seg('l-mode', v => {
+    S.mode = v; S.paths = null;
+    $$('#mod-luz [data-for]').forEach(g => g.hidden = g.dataset.for !== v);
+    if (v === 'orbit'){ launch(); S.zoom = Math.min(60, Math.max(12, S.ra*1.25)); zR.set(S.zoom); }
+    else if (v === 'point'){ S.zoom = 8; zR.set(8); }
+    else if (v === 'wave'){ S.zoom = 7; zR.set(7); startSigmaCurve(); setTimeout(drawSigma, 50); }
+    else { S.zoom = 11; zR.set(11); }
+    S.dirty = true;
+  });
+  return {
+    frame(dt){
+      if (S.mode === 'orbit' && S.orbit && !S.orbit.fell){ stepOrbit(S.spd*dt*60); S.dirty = true; }
+      if (S.mode === 'wave' && S.wview === 'wave' && S.wf){ S.phase += dt*2*Math.PI/1.4; S.dirty = true; }
+      if (S.dirty){ S.dirty = false; render(); }
+    },
+    resize(){ S.dirty = true; }
+  };
+})();
+
+/* =====================================================================
+   4. AGUJERO NEGRO (trazado de rayos en Schwarzschild)
+   ===================================================================== */
+const Agujero = (() => {
+  const cv = $('#cv-bh');
+  const small = window.matchMedia('(max-width: 700px)').matches;
+  const S = {r:15, elev:8, yaw:0, pitch:0, fov:60, fall:false, spin:true, clock:0, view:'static', tObs:0, extRun:false, disk:true, shift:true, grid:false, Tin:Math.pow(10,3.72), exp:1, q: small ? 0.5 : 0.75, mass:4.3e6, falling:false, dirty:true};
+  $('#b-q').value = String(S.q);
+  let gl, prog_, quad;
+  const FS = PREC + `
+uniform vec2 uRes; uniform vec3 uPos, uR, uU, uF, uRef;
+uniform float uTan, uFall, uDisk, uShift, uTin, uExp, uGrid, uPix;
+uniform float uProbe, uTobs, uRst, uFst, uK, uClock; uniform vec3 uNf;
+float gEk = 1.0;
+float gTr = 0.0;
+const float PR = 0.6;
+const float RIN = 3.0; const float ROUT = 14.0;
+${GLSL_BB}
+// color de un cuerpo negro a T desplazado por g. En falso color, el matiz usa g³ y el brillo sigue siendo el real.
+vec3 shiftCol(float T, float g){
+  vec3 real = bb(T*g);
+  if (uK < 1.5) return real;
+  vec3 c = bb(T*g*g*g);
+  float mr = max(real.r, max(real.g, real.b)), mc = max(c.r, max(c.g, c.b));
+  if (mc <= 0.0) return vec3(mr, 0.0, 0.0);
+  vec3 n = c/mc; float l = dot(n, vec3(0.3, 0.55, 0.15));
+  n = max(mix(vec3(l), n, 2.6), 0.0);
+  return n/max(n.r, max(n.g, n.b))*mr;
+}
+float hash1(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }
+vec3 hash3(vec3 p){ return fract(sin(vec3(dot(p,vec3(127.1,311.7,74.7)), dot(p,vec3(269.5,183.3,246.1)), dot(p,vec3(113.5,271.9,124.6))))*43758.5453); }
+float vnoise(vec3 p){
+  vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  float a = hash1(i), b = hash1(i+vec3(1.0,0.0,0.0)), c = hash1(i+vec3(0.0,1.0,0.0)), d = hash1(i+vec3(1.0,1.0,0.0));
+  float e = hash1(i+vec3(0.0,0.0,1.0)), g = hash1(i+vec3(1.0,0.0,1.0)), h = hash1(i+vec3(0.0,1.0,1.0)), k = hash1(i+vec3(1.0,1.0,1.0));
+  return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,g,f.x), mix(h,k,f.x), f.y), f.z);
+}
+float fbm(vec3 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ s += a*vnoise(p); p *= 2.03; a *= 0.5; } return s; }
+vec3 sky(vec3 d, float D, float foot, float mu){
+  if (uGrid > 0.5){
+    float lon = atan(d.z, d.x), lat = asin(clamp(d.y,-1.0,1.0)), k = 3.14159265/12.0;
+    float c = mod(floor(lon/k) + floor(lat/k), 2.0);
+    vec3 base = mix(vec3(0.05,0.07,0.12), vec3(0.20,0.24,0.32), c);
+    if (abs(lat) < 0.02) base = vec3(0.6,0.35,0.15);
+    return base * (uShift > 0.5 ? shiftCol(6500.0, D) : vec3(1.0));
+  }
+  vec3 col = vec3(0.0);
+  vec3 ng = normalize(vec3(0.25,0.92,0.30)); float b = dot(d, ng);
+  col += exp(-b*b/0.02)*(0.2 + 0.8*fbm(d*5.0))*0.05*shiftCol(4800.0, D);
+  float N = 42.0; vec3 c0 = floor(d*N); float sig = foot*0.9;
+  for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) for (int l = -1; l <= 1; l++){
+    vec3 c = c0 + vec3(float(i), float(j), float(l));
+    vec3 h = hash3(c);
+    if (h.x > 0.16) continue;
+    vec3 sp = normalize(c + 0.5 + (hash3(c+17.3) - 0.5)*0.9);
+    vec3 q = d - sp; float pr = exp(-dot(q,q)/(sig*sig));
+    if (pr < 1e-3) continue;
+    float br = 0.05 + 6.0*pow(hash1(c+3.1), 14.0);
+    float T = 2900.0 + 8000.0*h.z*h.z + 22000.0*pow(hash1(c+9.7), 25.0);
+    col += pr*br*mu*shiftCol(T, D);
+  }
+  return col;
+}
+vec3 diskCol(vec3 c, vec3 v, float Dobs){
+  float r = length(c), x = r/RIN;
+  float f = pow(x, -0.75)*pow(max(1.0 - inversesqrt(x), 0.0), 0.25)/0.4884;
+  float g = 1.0;
+  if (uShift > 0.5){
+    float Om = sqrt(0.5/(r*r*r));
+    float ly = -cross(c, v).y/gEk;
+    g = sqrt(1.0 - 1.5/r)/(1.0 - Om*ly)*Dobs;
+  }
+  // giro kepleriano diferencial; para observadores fuera se usa el instante de emisión (retraso de la luz)
+  float Omk = sqrt(0.5/(r*r*r));
+  float te = uFall > 0.5 ? uClock : uClock + (gTr - uTobs);
+  float ang = atan(c.z, c.x) + Omk*te;
+  float tex = 0.35 + 1.3*smoothstep(0.32, 0.78, fbm(vec3(r*3.0, 3.2*cos(ang), 3.2*sin(ang))));
+  float edge = 1.0 - smoothstep(ROUT-4.0, ROUT, r);
+  return shiftCol(uTin*f, g)*tex*edge;
+}
+// caída desde el reposo en el infinito: t(r) = F(r) − F(r_inicio), con y = ln(r − 1)
+float Ff(float y){
+  float e = exp(y); float r = 1.0 + e; float sr = sqrt(r);
+  return -(2.0/3.0)*r*sr - 2.0*sr + log((sr+1.0)*(sr+1.0)/e);
+}
+float rAt(float t){
+  float lo = -60.0, hi = 6.0;
+  for (int i = 0; i < 34; i++){ float m = 0.5*(lo+hi); if (Ff(m) - uFst > t) lo = m; else hi = m; }
+  return 1.0 + exp(0.5*(lo+hi));
+}
+vec3 probeCol(vec3 q, vec3 v, float rf){
+  float rq = max(length(q), 1.0001);
+  float g = 1.0;
+  if (uShift > 0.5){
+    float rdb = dot(q, v)/rq;
+    g = (1.0 - 1.0/rq)/(1.0 - rdb/sqrt(rq))*inversesqrt(1.0 - 1.0/length(uPos));
+  }
+  float tau = (2.0/3.0)*(uRst*sqrt(uRst) - rf*sqrt(rf));
+  float blink = fract(tau) < 0.3 ? 5.0 : 1.0;
+  return shiftCol(6500.0, g)*1.3*blink;
+}
+vec3 acc(vec3 x, float h2){ float r2 = dot(x,x); float r = sqrt(r2); return -1.5*h2*x/(r2*r2*r); }
+void main(){
+  vec2 p = (gl_FragCoord.xy - 0.5*uRes)/(0.5*uRes.y);
+  vec3 d = normalize(uR*p.x*uTan + uU*p.y*uTan + uF);
+  float r0 = length(uPos); vec3 rh = uPos/r0;
+  vec3 v; float Dsh;
+  if (uFall > 0.5){
+    // observador en caída libre (marco de Painlevé–Gullstrand, válido dentro del horizonte):
+    // hacia atrás, la luz avanza a c contra el flujo del espacio, que cae a √(1/r)
+    float ir = inversesqrt(r0);
+    gEk = 1.0 + dot(d, rh)*ir;      // energía de Killing del fotón con energía local 1
+    if (gEk <= 1e-4){ gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+    v = d + rh*ir;
+    Dsh = uShift > 0.5 ? 1.0/gEk : 1.0;
+  } else {
+    float gs = inversesqrt(1.0 - 1.0/r0);
+    Dsh = uShift > 0.5 ? gs : 1.0;
+    float dr = dot(d, rh);
+    v = dr*rh + (d - dr*rh)*gs;
+  }
+  vec3 x = uPos;
+  vec3 hv = cross(x, v); float h2 = dot(hv, hv);
+  vec3 col = vec3(0.0);
+  float rEsc = max(160.0, r0*2.0);
+  float tr = uTobs;
+  float esc = 0.0; vec3 escDir = vec3(0.0);
+  for (int i = 0; i < 520; i++){
+    float r = length(x);
+    float dt = 0.065*r/length(v);
+    vec3 a1 = acc(x, h2);
+    vec3 x2 = x + 0.5*dt*v, v2 = v + 0.5*dt*a1; vec3 a2 = acc(x2, h2);
+    vec3 x3 = x + 0.5*dt*v2, v3 = v + 0.5*dt*a2; vec3 a3 = acc(x3, h2);
+    vec3 x4 = x + dt*v3, v4 = v + dt*a3; vec3 a4 = acc(x4, h2);
+    vec3 xn = x + dt/6.0*(v + 2.0*v2 + 2.0*v3 + v4);
+    vec3 vn = v + dt/6.0*(a1 + 2.0*a2 + 2.0*a3 + a4);
+    float rmid = length(0.5*(x + xn));
+    tr -= dt/max(1.0 - 1.0/rmid, 1e-3); gTr = tr;
+    if (uProbe > 0.5){
+      vec3 mid = 0.5*(x + xn); float pr = dot(mid, uNf); vec3 sd = xn - x; float sl = length(sd);
+      if (pr > 0.7 && length(mid - pr*uNf) < PR + 0.5*sl){
+        float rf = rAt(tr);
+        if (abs(pr - rf) < PR + 0.5*sl){
+          vec3 c = rf*uNf;
+          float s = clamp(dot(c - x, sd)/max(dot(sd, sd), 1e-9), 0.0, 1.0);
+          vec3 q = x + s*sd;
+          if (length(q - c) < PR){ col = probeCol(q, v, rf); break; }
+        }
+      }
+    }
+    if (uDisk > 0.5 && x.y*xn.y < 0.0){
+      float fr = x.y/(x.y - xn.y); vec3 c = mix(x, xn, fr); float rc = length(c);
+      if (rc > RIN && rc < ROUT){ col = diskCol(c, mix(v, vn, fr), Dsh); break; }
+    }
+    x = xn; v = vn;
+    float rn = length(x);
+    if ((rn < 1.0 && dot(x, v) < 0.0) || rn < 0.01) break;
+    if (rn > rEsc && dot(x, v) > 0.0){ esc = 1.0; escDir = normalize(v); break; }
+  }
+  // tamaño de cada píxel en el cielo de origen: las estrellas siguen siendo puntos y su
+  // brillo se multiplica por la amplificación μ (lente y aberración)
+  float foot = uPix;
+#ifdef DERIV
+  foot = max(length(dFdx(escDir)), length(dFdy(escDir)));
+#endif
+  foot = clamp(foot, uPix*0.05, uPix*8.0);
+  float mu = clamp(uPix*uPix/(foot*foot), 0.02, 40.0);
+  if (esc > 0.5) col = sky(escDir, Dsh, foot, mu);
+  float mc = max(col.r, max(col.g, col.b));
+  col = mc > 0.0 ? col*((1.0 - exp(-mc*uExp))/mc) : vec3(0.0);
+  gl_FragColor = vec4(pow(col, vec3(1.0/2.2)), 1.0);
+}`;
+  try {
+    gl = cv.getContext('webgl', {antialias:false, alpha:false});
+    if (!gl) throw new Error('sin contexto');
+    const der = gl.getExtension('OES_standard_derivatives');
+    prog_ = program(gl, VS_QUAD, (der ? '#extension GL_OES_standard_derivatives : enable\n#define DERIV 1\n' : '') + FS);
+    quad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+  } catch(err){ noGL(cv, err.message); gl = null; }
+
+  const RS1 = 2953.25, C = 2.99792458e8; // r_s de 1 masa solar en m
+  const RST = 6, T_END = 90;              // la sonda: pasa por r = 6 r_s en t = 0
+  const Fr = r => { const sr = Math.sqrt(r); return -(2/3)*r*sr - 2*sr + Math.log((sr+1)*(sr+1)/(r-1)); };
+  const FST = Fr(RST);
+  function rAtJS(t){ let lo = -60, hi = 6; for (let i = 0; i < 60; i++){ const m = (lo+hi)/2; const r = 1 + Math.exp(m); if (Fr(r) - FST > t) lo = m; else hi = m; } return 1 + Math.exp((lo+hi)/2); }
+  function readouts(){
+    const r = S.r, M = S.mass, rs = RS1*M, tU = rs/C;
+    const tH = (2/3)*(Math.pow(r,1.5) - 1)*tU, tS = (2/3)*Math.pow(r,1.5)*tU;
+    const tid = C*C*2/(rs*rs*r*r*r);
+    const gE = 9.81;
+    const chip = tid < 0.1*gE ? '<span class="chip ok">inofensiva</span>' : tid < 10*gE ? '<span class="chip warn">se nota</span>' : tid < 1000*gE ? '<span class="chip bad">letal</span>' : '<span class="chip bad">espaguetización</span>';
+    const be = Math.sqrt(1/r);
+    let a = null;
+    if (r > 1){
+      const s = (1.5*Math.sqrt(3)/r)*Math.sqrt(1-1/r);
+      a = r >= 1.5 ? Math.asin(Math.min(s,1)) : Math.PI - Math.asin(Math.min(s,1));
+      if (S.fall){ const ca = Math.cos(a); a = Math.acos((ca + be)/(1 + be*ca)); }
+    }
+    if (S.view === 'ext'){
+      const rf = rAtJS(S.tObs);
+      const ext = [
+        ['Radio de Schwarzschild', rs < 1e6 ? sci(rs/1e3)+' km' : sci(rs/1.496e11)+' UA'],
+        ['Tiempo del observador externo', (S.tObs < 0 ? '−' : '')+fmtSec(Math.abs(S.tObs)*tU)],
+        ['Sonda en ese instante (coord. de Schwarzschild)', 'r = '+(rf < 1.001 ? '1 + '+sci(rf-1,2) : fx(rf,3))+' r<sub>s</sub>'],
+        ['La sonda destella cada', fmtSec(tU)+' de su reloj'],
+        ['Su reloj al cruzar el horizonte', fmtSec((2/3)*(Math.pow(RST,1.5)-1)*tU)+' tras pasar por 6 r<sub>s</sub>'],
+        ['Su imagen se apaga ×e cada', fmtSec(2*tU)],
+        ['Observador quieto a', fx(r,1)+' r<sub>s</sub>'],
+        ['Tamaño de la sonda', 'exagerado (0,6 r<sub>s</sub>) para que se vea'],
+      ];
+      $('#b-out').innerHTML = ext.map(x => `<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join('');
+      return;
+    }
+    const rows = [
+      ['Radio de Schwarzschild', rs < 1e6 ? sci(rs/1e3)+' km' : sci(rs/1.496e11)+' UA'],
+      ['Distancia', sci(r*rs/1e3)+' km'],
+      ['Caída hasta el horizonte', r > 1 ? fmtSec(tH) : 'ya cruzado'],
+      ['Caída hasta la singularidad', fmtSec(tS)],
+      ['1 hora quieto aquí equivale a', r > 1 ? sci(1/Math.sqrt(1-1/r))+' h lejos' : 'imposible estar quieto'],
+      ['Velocidad del flujo √(r<sub>s</sub>/r)', fx(be,3)+' c'],
+      ['Diámetro aparente de la sombra', a === null ? '—' : fx(2*a*180/Math.PI,1)+'°'],
+      ['Marea sobre 2 m', sci(tid/gE)+' g '+chip],
+    ];
+    $('#b-out').innerHTML = rows.map(x => `<dt>${x[0]}</dt><dd>${x[1]}</dd>`).join('');
+  }
+  function render(){
+    readouts();
+    if (!gl) return;
+    fitCanvas(cv, (S.extRun || S.falling) ? Math.min(S.q, 0.5) : S.q); // más rápido mientras anima
+    const W = cv.width, H = cv.height; gl.viewport(0,0,W,H);
+    const e = S.elev*Math.PI/180, r = S.r;
+    const pos = [0, r*Math.sin(e), -r*Math.cos(e)];
+    const F0 = norm([-pos[0],-pos[1],-pos[2]]), R0 = norm(cross([0,1,0], F0)), U0 = cross(F0, R0);
+    const [Rv,Uv,Fv] = rotBasis(R0,U0,F0,S.yaw,S.pitch);
+    const tn = Math.tan(S.fov*Math.PI/360);
+    gl.useProgram(prog_); gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    const la = gl.getAttribLocation(prog_, 'aP'); gl.enableVertexAttribArray(la); gl.vertexAttribPointer(la,2,gl.FLOAT,false,0,0);
+    const u = prog_.u;
+    gl.uniform2f(u.uRes, W, H); gl.uniform3fv(u.uPos, pos); gl.uniform3fv(u.uR, Rv); gl.uniform3fv(u.uU, Uv); gl.uniform3fv(u.uF, Fv); gl.uniform3fv(u.uRef, REF);
+    gl.uniform1f(u.uTan, tn); gl.uniform1f(u.uFall, S.fall ? 1 : 0); gl.uniform1f(u.uDisk, S.disk ? 1 : 0); gl.uniform1f(u.uShift, S.shift ? 1 : 0);
+    const nf = norm(lin(R0, 0.85, U0, 0.53));
+    gl.uniform1f(u.uProbe, S.view === 'ext' ? 1 : 0); gl.uniform1f(u.uTobs, S.tObs); gl.uniform1f(u.uRst, RST); gl.uniform1f(u.uFst, FST); gl.uniform3fv(u.uNf, nf);
+    gl.uniform1f(u.uK, S.kcol ? 3 : 1); gl.uniform1f(u.uClock, S.clock);
+    gl.uniform1f(u.uTin, S.Tin); gl.uniform1f(u.uExp, S.exp); gl.uniform1f(u.uGrid, S.grid ? 1 : 0); gl.uniform1f(u.uPix, 2*tn/H);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const be = Math.sqrt(1/r), gs = r > 1 ? 1/Math.sqrt(1-1/r) : Infinity;
+    const look = Math.abs(Math.cos(S.yaw)) > 0.7 ? (Math.cos(S.yaw) > 0 ? 'mirando al agujero' : 'mirando hacia atrás') : 'mirando de lado';
+    if (S.view === 'ext'){
+      $('#hud-bh').innerHTML = `Observador externo quieto en r = ${fx(r,1)} r<sub>s</sub> · t = ${fx(S.tObs,1)} r<sub>s</sub>/c<br>La sonda destella cada r<sub>s</sub>/c de su propio reloj`;
+    } else {
+      const tU = RS1*S.mass/C;
+      $('#hud-bh').innerHTML = `r = ${fx(r, r < 2 ? 3 : 2)} r<sub>s</sub> · ${S.fall ? 'cayendo' : 'quieto'} · ${look}` +
+        (S.fall && r <= 1 ? ` · <span style="color:#f0a35e">dentro del horizonte</span><br>singularidad en ${fmtSec((2/3)*Math.pow(r,1.5)*tU)} de tu reloj · luz de arriba ×${fx(1/(1+be),3)}`
+         : S.fall ? `<br>luz de arriba ×${fx(1/(1+be),3)} · de frente ×${sci(1/(1-be))}` : `<br>luz lejana desplazada al azul ×${sci(gs)}`);
+    }
+  }
+  const RMIN = 0.05, sToR = v => RMIN*Math.pow(40/RMIN, v/1000);
+  const rToS = r => 1000*Math.log(r/RMIN)/Math.log(40/RMIN);
+  const rR = range('b-r', v => {
+    S.r = sToR(v); stopFall();
+    if (S.view === 'ext' && S.r < 8){ S.r = 8; rR.set(rToS(8)); }
+    if (S.view === 'static' && S.r < 1.03){ S.view = 'fall'; S.fall = true; obs.set('fall'); }
+    S.dirty = true;
+  }, v => { const r = sToR(v); return fx(r, r < 1 ? 3 : 2)+' r_s'; });
+  S.r = sToR(946);
+  const elR = range('b-el', v => { S.elev = v; S.dirty = true; }, v => fx(v,1)+'°');
+  range('b-T', v => { S.Tin = Math.pow(10,v); S.dirty = true; }, v => sci(Math.round(Math.pow(10,v)/100)*100, 3)+' K');
+  range('b-exp', v => { S.exp = Math.pow(10,v); S.dirty = true; }, v => '×'+sci(Math.pow(10,v),2));
+  range('b-fov', v => { S.fov = v; S.dirty = true; }, v => v+'°');
+  check('b-disk', v => { S.disk = v; S.dirty = true; });
+  check('b-shift', v => { S.shift = v; S.dirty = true; });
+  check('b-grid', v => { S.grid = v; S.dirty = true; });
+  check('b-k', v => { S.kcol = v; S.dirty = true; });
+  check('b-spin', v => { S.spin = v; S.dirty = true; });
+  $('#b-q').addEventListener('change', e => { S.q = parseFloat(e.target.value); S.dirty = true; });
+  $('#b-mass').addEventListener('change', e => { S.mass = parseFloat(e.target.value); S.dirty = true; });
+  function setView(v){
+    stopFall(); S.extRun = false;
+    S.view = v; S.fall = v === 'fall';
+    $('#b-r-lab').textContent = v === 'ext' ? 'Distancia del observador' : 'Distancia al centro';
+    if (v === 'ext'){
+      S.r = 30; rR.set(rToS(S.r)); S.elev = 15; elR.set(15);
+      S.tObs = 0; S.yaw = 0; S.pitch = 0;
+    }
+    $('#b-fall').textContent = v === 'ext' ? 'Soltar la sonda' : 'Dejarse caer';
+    S.dirty = true;
+  }
+  const obs = seg('b-obs', setView);
+  $$('[data-blook]').forEach(b => b.addEventListener('click', () => { S.yaw = +b.dataset.blook*Math.PI/180; S.pitch = 0; S.dirty = true; }));
+  const note = $('#bh-note');
+  function stopFall(){ if (S.falling){ S.falling = false; $('#b-fall').textContent = 'Dejarse caer'; } note.hidden = true; }
+  $('#b-fall').addEventListener('click', () => {
+    if (S.view === 'ext'){
+      if (S.extRun){ S.extRun = false; $('#b-fall').textContent = 'Continuar'; return; }
+      if (S.tObs >= T_END || $('#b-fall').textContent !== 'Continuar') S.tObs = -2;
+      S.extRun = true; note.hidden = true; $('#b-fall').textContent = 'Detener'; return;
+    }
+    if (S.falling){ stopFall(); return; }
+    if (S.r < 0.06){ S.r = sToR(946); rR.set(rToS(S.r)); }
+    S.falling = true; S.fall = true; S.view = 'fall'; obs.set('fall'); note.hidden = true;
+    $('#b-fall').textContent = 'Detener';
+  });
+  drag(cv, (dx, dy) => { const k = S.fov*Math.PI/180/cv.clientHeight; S.yaw -= dx*k; S.pitch = Math.max(-1.5, Math.min(1.5, S.pitch + dy*k)); S.dirty = true; });
+  readouts();
+  return {
+    frame(dt){
+      if (S.spin && S.disk && gl){ S.clock += 6*dt; S.dirty = true; }
+      if (S.extRun){
+        S.tObs += 4*dt;  // reloj de pared: avanza aunque los fotogramas sean lentos
+        if (S.tObs >= T_END){
+          S.tObs = T_END; S.extRun = false; $('#b-fall').textContent = 'Repetir';
+          const tU = RS1*S.mass/C;
+          note.innerHTML = `<b>Desde fuera, la sonda nunca cruza el horizonte.</b> Sus destellos llegan cada vez más espaciados y su luz enrojece hasta apagarse: un factor e cada ${fmtSec(2*tU)}. Para la sonda no hubo ninguna pausa: cruzó el horizonte ${fmtSec((2/3)*(Math.pow(RST,1.5)-1)*tU)} después de pasar por 6 r<sub>s</sub>, según su propio reloj.`;
+          note.hidden = false;
+        }
+        S.dirty = true;
+      }
+      if (S.falling){
+        // animación en escala logarítmica de r: más lenta cerca del horizonte y dentro
+        S.r *= Math.exp(-0.32*Math.min(dt, 0.4));
+        if (S.r <= 0.05){
+          S.r = 0.05; S.falling = false; $('#b-fall').textContent = 'Volver a empezar';
+          const tU = RS1*S.mass/C;
+          note.innerHTML = `<b>Llegando a la singularidad.</b> Desde el horizonte han pasado ${fmtSec((2/3)*(1 - Math.pow(0.05,1.5))*tU)} de tu reloj. Las mareas ya serían de ${sci(C*C*2/(Math.pow(RS1*S.mass,2)*Math.pow(0.05,3))/9.81)} g sobre 2 m. A partir de aquí la relatividad general deja de ser fiable y el simulador se detiene.`;
+          note.hidden = false;
+        }
+        rR.set(rToS(S.r));
+        S.dirty = true;
+      }
+      if (S.dirty){ S.dirty = false; render(); }
+    },
+    resize(){ S.dirty = true; }
+  };
+})();
+
+/* =====================================================================
+   Navegación y bucle
+   ===================================================================== */
+const MODS = {viaje:Viaje, objetos:Objetos, luz:Luz, agujero:Agujero};
+/* ---------- pantalla completa: la API nativa si el navegador la permite; si no, el módulo ocupa toda la ventana ---------- */
+const ICON_EXP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const ICON_CMP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+function exitFs(){
+  $$('.mod.fs').forEach(m => { m.classList.remove('fs','panel-open'); const b = m.querySelector('.fsbtn'); b.innerHTML = ICON_EXP; b.setAttribute('aria-label','Pantalla completa'); });
+  document.body.classList.remove('fs-lock');
+  if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+}
+$$('.mod').forEach(mod => {
+  const bar = document.createElement('div'); bar.className = 'fsbar';
+  bar.innerHTML = `<button type="button" class="panelbtn" aria-label="Mostrar u ocultar los controles">Controles</button><button type="button" class="fsbtn" aria-label="Pantalla completa">${ICON_EXP}</button>`;
+  mod.querySelector('.stage').appendChild(bar);
+  bar.querySelector('.panelbtn').addEventListener('click', () => mod.classList.toggle('panel-open'));
+  bar.querySelector('.fsbtn').addEventListener('click', () => {
+    if (mod.classList.contains('fs')){ exitFs(); return; }
+    mod.classList.add('fs'); document.body.classList.add('fs-lock');
+    const b = bar.querySelector('.fsbtn'); b.innerHTML = ICON_CMP; b.setAttribute('aria-label','Salir de pantalla completa');
+    try { const p = mod.requestFullscreen && mod.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch(e){}
+  });
+});
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) exitFs(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.fullscreenElement) exitFs(); });
+let active = 'viaje';
+function show(name){
+  if (!MODS[name]) name = 'viaje';
+  exitFs();
+  active = name;
+  $$('nav button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
+  Object.keys(MODS).forEach(k => { $('#mod-'+k).hidden = k !== name; });
+  MODS[name].resize();
+}
+$$('nav button').forEach(b => b.addEventListener('click', () => { try { history.replaceState(null, '', '#'+b.dataset.tab); } catch(e){} show(b.dataset.tab); }));
+window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+show((location.hash || '#viaje').slice(1));
+const ro = new ResizeObserver(() => MODS[active].resize());
+$$('.stage, .chartwrap').forEach(s => ro.observe(s));
+let last = performance.now();
+function loop(now){
+  const dt = Math.min(0.5, (now - last)/1000); last = now;
+  try { MODS[active].frame(dt); } catch(e){ console.error(e); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
